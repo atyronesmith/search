@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  file-search-db:
+    image: docker.io/ankane/pgvector:latest
+    container_name: file-search-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: file_search
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d file_search"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Podman-specific: disable SELinux labels for better compatibility
+    security_opt:
+      - label=disable
+    networks:
+      - file-search-net
+
+networks:
+  file-search-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
