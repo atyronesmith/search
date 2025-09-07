@@ -52,12 +52,25 @@ function App() {
     }
   }
 
+  // New handler for SearchWithDetails results
+  const handleSearchWithDetails = (query: string, results: any[], append: boolean = false) => {
+    if (!append) {
+      setSearchQuery(query)
+    }
+    if (append) {
+      setSearchResults(prev => [...prev, ...(results || [])])
+    } else {
+      setSearchResults(results || [])
+    }
+  }
+
   const renderPage = () => {
     switch (currentPage) {
       case 'search':
         return (
           <SearchPage
             onSearch={handleSearch}
+            onSearchWithDetails={handleSearchWithDetails}
             searchQuery={searchQuery}
             searchResults={searchResults}
           />
@@ -74,7 +87,7 @@ function App() {
       case 'settings':
         return <SettingsPage />
       default:
-        return <SearchPage onSearch={handleSearch} searchQuery={searchQuery} searchResults={searchResults} />
+        return <SearchPage onSearch={handleSearch} onSearchWithDetails={handleSearchWithDetails} searchQuery={searchQuery} searchResults={searchResults} />
     }
   }
 

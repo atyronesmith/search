@@ -27,9 +27,8 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
     try {
       switch (action) {
         case 'start':
-          // Use a reasonable default path - let user choose in future versions
-          const defaultPath = '/home/user'  // TODO: Make this configurable via settings
-          const result = await window.go.main.App.StartIndexing(defaultPath)
+          // Use empty path to let backend use configured paths from .env (WATCH_PATHS)
+          const result = await window.go.main.App.StartIndexing('')
           console.log('Indexing started:', result)
           break
         case 'stop':
@@ -94,6 +93,12 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
           <h3>Indexing Errors</h3>
           <div className="value">{indexingStatus?.errors || 0}</div>
           <div className="label">Failed file operations</div>
+        </div>
+
+        <div className="dashboard-card">
+          <h3>Database Size</h3>
+          <div className="value">{systemStatus?.database?.size_info?.total_db_size || 'N/A'}</div>
+          <div className="label">Total disk space used</div>
         </div>
       </div>
 
@@ -208,6 +213,15 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
               <p>Status: {systemStatus.database?.connected ? '✅ Connected' : '❌ Disconnected'}</p>
               {systemStatus.database?.latency && (
                 <p>Latency: {systemStatus.database.latency}ms</p>
+              )}
+              {systemStatus.database?.size_info && (
+                <div style={{ marginTop: '10px' }}>
+                  <p><strong>Database Disk Usage:</strong></p>
+                  <p>Total: {systemStatus.database.size_info.total_db_size}</p>
+                  <p>Files: {systemStatus.database.size_info.files_table_size}</p>
+                  <p>Chunks: {systemStatus.database.size_info.chunks_table_size}</p>
+                  <p>Search: {systemStatus.database.size_info.text_search_table_size}</p>
+                </div>
               )}
             </div>
             

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -161,8 +163,8 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 	}
 	scanner := indexing.NewScanner(db, scannerConfig, log)
 	
-	// Initialize monitor
-	monitor, err := indexing.NewMonitor(db, cfg.WatchPaths, cfg.WatchIgnorePatterns, log)
+	// Initialize monitor - will be configured from database when started
+	monitor, err := indexing.NewMonitor(db, []string{}, []string{}, log)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create file monitor: %w", err)
@@ -186,9 +188,29 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 	
 	// Initialize extractor manager
 	extractorManager := extractor.NewExtractorManager()
+	
+	// Unstructured.io configuration for comprehensive document processing
+	unstructuredConfig := extractor.UnstructuredConfig{
+		VenvPath: "file-search-system/unstructured-venv",
+		Timeout:  60 * time.Second,
+	}
+	
+	// Priority order matters: UnstructuredExtractor handles most document formats
+	extractorManager.AddExtractor(extractor.NewUnstructuredExtractor(unstructuredConfig, log))
+	
+	// Enhanced PDF extractor as fallback for PDFs
+	doclingConfig := &extractor.DoclingConfig{
+		ServiceURL: cfg.DoclingServiceURL,
+		Timeout:    30 * time.Second,
+		Enabled:    false, // Disable Docling in favor of Unstructured
+	}
+	extractorManager.AddExtractor(extractor.NewEnhancedPDFExtractor(extractor.DefaultConfig(), doclingConfig))
+	
+	// TextExtractor handles remaining text files
 	extractorManager.AddExtractor(extractor.NewTextExtractor(extractor.DefaultConfig()))
+	
+	// CodeExtractor handles programming language files
 	extractorManager.AddExtractor(extractor.NewCodeExtractor(extractor.DefaultConfig()))
-	extractorManager.AddExtractor(extractor.NewPDFExtractor(extractor.DefaultConfig()))
 	
 	// Initialize chunker manager  
 	chunkerManager := chunker.NewChunkerManager(chunker.DefaultConfig())
@@ -243,6 +265,12 @@ func (s *Service) Start() error {
 	s.wg.Add(1)
 	go s.runIndexingLoop()
 	
+	// Start file monitoring
+	if err := s.StartFileMonitoring(); err != nil {
+		s.log.WithError(err).Error("Failed to start file monitoring")
+		// Don't fail service startup if monitoring fails
+	}
+	
 	// Emit startup event
 	s.emitSystemEvent("service_started", "Background service started successfully", "info")
 	
@@ -260,6 +288,11 @@ func (s *Service) Stop() error {
 	// Stop monitoring
 	if err := s.StopIndexing(); err != nil {
 		s.log.WithError(err).Error("Error stopping indexing")
+	}
+	
+	// Stop file monitoring
+	if err := s.StopFileMonitoring(); err != nil {
+		s.log.WithError(err).Error("Error stopping file monitoring")
 	}
 	
 	// Wait for all goroutines to finish
@@ -560,37 +593,70 @@ func (s *Service) runStatsUpdater() {
 	}
 }
 
-// runIndexingLoop runs the main indexing processing loop
+// runIndexingLoop runs the main indexing processing loop with parallel workers
 func (s *Service) runIndexingLoop() {
 	defer s.wg.Done()
 	
-	s.log.Info("Starting indexing loop")
+	s.log.WithField("workers", s.config.IndexWorkers).Info("Starting indexing loop with parallel workers")
 	
+	// Create work channel for distributing file processing tasks
+	workChan := make(chan *database.File, s.config.IndexWorkers*2) // Buffer for smooth processing
+	
+	// Start worker goroutines
+	for i := 0; i < s.config.IndexWorkers; i++ {
+		s.wg.Add(1)
+		go s.runIndexingWorker(i, workChan)
+	}
+	
+	// Main dispatcher loop
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+	defer close(workChan) // Close channel when done
 	
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			// Only process if indexing is active and not paused
+			// Only dispatch work if indexing is active and not paused
 			if atomic.LoadInt32(&s.indexingActive) == 1 && 
 			   atomic.LoadInt32(&s.indexingPaused) == 0 {
 				
 				// Apply rate limiting
 				if s.rateLimiter.AllowIndexing() {
-					s.processNextFile()
+					s.dispatchNextFile(workChan)
 				}
 			}
 		}
 	}
 }
 
-// processNextFile processes the next file in the indexing queue
-func (s *Service) processNextFile() {
+// runIndexingWorker processes files from the work channel
+func (s *Service) runIndexingWorker(workerID int, workChan <-chan *database.File) {
+	defer s.wg.Done()
+	
+	s.log.WithField("worker_id", workerID).Info("Starting indexing worker")
+	
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case file, ok := <-workChan:
+			if !ok {
+				s.log.WithField("worker_id", workerID).Info("Work channel closed, stopping worker")
+				return
+			}
+			
+			if file != nil {
+				s.processFile(workerID, file)
+			}
+		}
+	}
+}
+
+// dispatchNextFile gets the next pending file and sends it to workers
+func (s *Service) dispatchNextFile(workChan chan<- *database.File) {
 	ctx := context.Background()
-	start := time.Now()
 	
 	// Get next pending file
 	file, err := s.getNextPendingFile(ctx)
@@ -610,9 +676,26 @@ func (s *Service) processNextFile() {
 		return
 	}
 	
+	// Send to worker (non-blocking)
+	select {
+	case workChan <- file:
+		// File dispatched successfully
+	default:
+		// All workers are busy, skip this iteration
+		// Reset file status back to pending
+		s.updateFileStatus(ctx, file.ID, "pending", "")
+	}
+}
+
+// processFile processes a single file (called by workers)
+func (s *Service) processFile(workerID int, file *database.File) {
+	ctx := context.Background()
+	start := time.Now()
+	
 	s.log.WithFields(logrus.Fields{
-		"file_id": file.ID,
-		"path":    file.Path,
+		"worker_id": workerID,
+		"file_id":   file.ID,
+		"path":      file.Path,
 	}).Info("Processing file")
 	
 	// Process the file with improved error handling
@@ -621,6 +704,7 @@ func (s *Service) processNextFile() {
 		errorCategory := s.categorizeProcessingError(err)
 		
 		s.log.WithError(err).WithFields(logrus.Fields{
+			"worker_id":      workerID,
 			"file_id":        file.ID,
 			"path":           file.Path,
 			"error_category": errorCategory,
@@ -629,9 +713,10 @@ func (s *Service) processNextFile() {
 		// For certain error types, mark as skipped instead of error
 		if s.shouldSkipFile(err, errorCategory) {
 			s.log.WithFields(logrus.Fields{
-				"file_id": file.ID,
-				"path":    file.Path,
-				"reason":  err.Error(),
+				"worker_id": workerID,
+				"file_id":   file.ID,
+				"path":      file.Path,
+				"reason":    err.Error(),
 			}).Info("Skipping file due to expected condition")
 			
 			s.updateFileStatus(ctx, file.ID, "skipped", err.Error())
@@ -653,9 +738,10 @@ func (s *Service) processNextFile() {
 	
 	processingTime := time.Since(start).Milliseconds()
 	s.log.WithFields(logrus.Fields{
-		"file_id": file.ID,
-		"path":    file.Path,
-		"time_ms": processingTime,
+		"worker_id": workerID,
+		"file_id":   file.ID,
+		"path":      file.Path,
+		"time_ms":   processingTime,
 	}).Info("File processed successfully")
 	
 	// Update indexing statistics
@@ -663,6 +749,7 @@ func (s *Service) processNextFile() {
 	
 	s.emitIndexingEvent("file_processed", file.Path, "completed", nil, processingTime)
 }
+
 
 // emitIndexingEvent emits an indexing event
 func (s *Service) emitIndexingEvent(eventType, filePath, status string, err error, processTime int64) {
@@ -1026,4 +1113,229 @@ func (s *Service) updateIndexingStats(ctx context.Context) {
 	if _, err := s.db.Exec(ctx, statsQuery); err != nil {
 		s.log.WithError(err).Warn("Failed to update indexing stats")
 	}
+}
+
+// StartFileMonitoring starts the file monitoring with paths from database config
+func (s *Service) StartFileMonitoring() error {
+	// Get current database configuration
+	dbConfigService := config.NewDBConfigService(s.db)
+	dbConfig, err := dbConfigService.GetConfig(context.Background())
+	if err != nil {
+		s.log.WithError(err).Error("Failed to get database config for monitoring")
+		return err
+	}
+
+	// Stop existing monitoring if running
+	s.StopFileMonitoring()
+
+	// Update monitor with database paths
+	if err := s.monitor.UpdatePaths(dbConfig.WatchPaths, dbConfig.WatchIgnorePatterns); err != nil {
+		s.log.WithError(err).Error("Failed to update monitor paths")
+		return err
+	}
+
+	// Start monitoring
+	if err := s.monitor.Start(s.ctx); err != nil {
+		s.log.WithError(err).Error("Failed to start file monitoring")
+		return err
+	}
+
+	atomic.StoreInt32(&s.monitoringActive, 1)
+	s.log.WithField("paths", dbConfig.WatchPaths).Info("File monitoring started with database configuration")
+
+	// Start processing file changes
+	s.wg.Add(1)
+	go s.processFileChanges()
+
+	return nil
+}
+
+// StopFileMonitoring stops the file monitoring
+func (s *Service) StopFileMonitoring() error {
+	if atomic.LoadInt32(&s.monitoringActive) == 0 {
+		return nil // Already stopped
+	}
+
+	atomic.StoreInt32(&s.monitoringActive, 0)
+	if err := s.monitor.Stop(); err != nil {
+		s.log.WithError(err).Error("Failed to stop file monitor")
+		return err
+	}
+
+	s.log.Info("File monitoring stopped")
+	return nil
+}
+
+// RestartFileMonitoring restarts file monitoring with updated database configuration
+func (s *Service) RestartFileMonitoring() error {
+	s.log.Info("Restarting file monitoring with updated configuration")
+	return s.StartFileMonitoring()
+}
+
+// processFileChanges processes file system changes detected by the monitor
+func (s *Service) processFileChanges() {
+	defer s.wg.Done()
+	
+	s.log.Info("Starting file changes processor")
+	changes := s.monitor.GetChangesChan()
+	
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case change, ok := <-changes:
+			if !ok {
+				s.log.Info("File changes channel closed")
+				return
+			}
+			
+			s.log.WithFields(logrus.Fields{
+				"path":        change.Path,
+				"change_type": change.ChangeType,
+				"timestamp":   change.Timestamp,
+			}).Debug("Processing file change")
+			
+			// Handle different change types
+			switch change.ChangeType {
+			case database.ChangeTypeCreated, database.ChangeTypeModified:
+				if err := s.handleFileAddedOrModified(change.Path); err != nil {
+					s.log.WithError(err).WithField("path", change.Path).Error("Failed to handle file change")
+				}
+			case database.ChangeTypeDeleted:
+				if err := s.handleFileDeleted(change.Path); err != nil {
+					s.log.WithError(err).WithField("path", change.Path).Error("Failed to handle file deletion")
+				}
+			case database.ChangeTypeRenamed:
+				if err := s.handleFileRenamed(change.OldPath, change.Path); err != nil {
+					s.log.WithError(err).WithFields(logrus.Fields{
+						"old_path": change.OldPath,
+						"new_path": change.Path,
+					}).Error("Failed to handle file rename")
+				}
+			}
+		}
+	}
+}
+
+// handleFileAddedOrModified handles when a file is created or modified
+func (s *Service) handleFileAddedOrModified(path string) error {
+	ctx := context.Background()
+	
+	// Check if file already exists in database
+	var fileID int64
+	query := `SELECT id FROM files WHERE path = $1`
+	err := s.db.QueryRow(ctx, query, path).Scan(&fileID)
+	
+	if err != nil {
+		// File doesn't exist, add it directly to database for indexing
+		if err := s.addFileForMonitoring(path); err != nil {
+			return fmt.Errorf("failed to add new file: %w", err)
+		}
+		s.log.WithField("path", path).Info("Added new file for indexing")
+	} else {
+		// File exists, mark for re-indexing
+		updateQuery := `UPDATE files SET indexing_status = 'pending', last_indexed = NULL WHERE id = $1`
+		if _, err := s.db.Exec(ctx, updateQuery, fileID); err != nil {
+			return fmt.Errorf("failed to mark file for re-indexing: %w", err)
+		}
+		s.log.WithField("path", path).Info("Marked modified file for re-indexing")
+	}
+	
+	return nil
+}
+
+// handleFileDeleted handles when a file is deleted
+func (s *Service) handleFileDeleted(path string) error {
+	ctx := context.Background()
+	
+	// Remove from database (cascading deletes will handle chunks)
+	query := `DELETE FROM files WHERE path = $1`
+	result, err := s.db.Exec(ctx, query, path)
+	if err != nil {
+		return fmt.Errorf("failed to delete file from database: %w", err)
+	}
+	
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+		s.log.WithField("path", path).Info("Removed deleted file from database")
+	}
+	
+	return nil
+}
+
+// handleFileRenamed handles when a file is renamed
+func (s *Service) handleFileRenamed(oldPath, newPath string) error {
+	ctx := context.Background()
+	
+	// Update path in database
+	query := `UPDATE files SET path = $1, parent_path = $2 WHERE path = $3`
+	newParentPath := filepath.Dir(newPath)
+	
+	result, err := s.db.Exec(ctx, query, newPath, newParentPath, oldPath)
+	if err != nil {
+		return fmt.Errorf("failed to update renamed file path: %w", err)
+	}
+	
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+		s.log.WithFields(logrus.Fields{
+			"old_path": oldPath,
+			"new_path": newPath,
+		}).Info("Updated renamed file path in database")
+	}
+	
+	return nil
+}
+
+// addFileForMonitoring adds a new file to the database for indexing (used by monitoring system)
+func (s *Service) addFileForMonitoring(path string) error {
+	ctx := context.Background()
+	
+	// Get file info
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+	
+	// Calculate basic properties
+	parentPath := filepath.Dir(path)
+	filename := filepath.Base(path)
+	extension := strings.ToLower(filepath.Ext(path))
+	
+	// Determine file type
+	var fileType string
+	switch extension {
+	case ".pdf", ".doc", ".docx", ".rtf":
+		fileType = "document"
+	case ".txt", ".md", ".csv":
+		fileType = "text"
+	case ".xls", ".xlsx":
+		fileType = "spreadsheet"
+	case ".py", ".js", ".go", ".java", ".c", ".cpp", ".rs", ".ts", ".jsx", ".tsx":
+		fileType = "code"
+	default:
+		fileType = "text" // Default fallback
+	}
+	
+	// Insert file into database
+	query := `
+		INSERT INTO files (path, parent_path, filename, extension, file_type, size_bytes, 
+			               created_at, modified_at, indexing_status, last_indexed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NULL)
+	`
+	
+	_, err = s.db.Exec(ctx, query,
+		path,
+		parentPath,
+		filename,
+		extension,
+		fileType,
+		info.Size(),
+		info.ModTime(),
+		info.ModTime(),
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to insert file: %w", err)
+	}
+	
+	return nil
 }

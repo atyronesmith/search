@@ -28,17 +28,18 @@ func NewQueryProcessor() *QueryProcessor {
 
 // ProcessedQuery represents a processed search query
 type ProcessedQuery struct {
-	Original     string   `json:"original"`
-	Cleaned      string   `json:"cleaned"`
-	Terms        []string `json:"terms"`
-	Phrases      []string `json:"phrases"`
-	MustInclude  []string `json:"must_include"`
-	MustExclude  []string `json:"must_exclude"`
-	FileTypes    []string `json:"file_types"`
-	DateRange    *DateRange `json:"date_range,omitempty"`
-	SizeRange    *SizeRange `json:"size_range,omitempty"`
-	IsQuestion   bool     `json:"is_question"`
-	QueryType    string   `json:"query_type"` // "keyword", "natural", "code", "path"
+	Original      string         `json:"original"`
+	Cleaned       string         `json:"cleaned"`
+	Terms         []string       `json:"terms"`
+	Phrases       []string       `json:"phrases"`
+	MustInclude   []string       `json:"must_include"`
+	MustExclude   []string       `json:"must_exclude"`
+	FileTypes     []string       `json:"file_types"`
+	DateRange     *DateRange     `json:"date_range,omitempty"`
+	SizeRange     *SizeRange     `json:"size_range,omitempty"`
+	IsQuestion    bool           `json:"is_question"`
+	QueryType     string         `json:"query_type"` // "keyword", "natural", "code", "path"
+	EnhancedQuery *EnhancedQuery `json:"enhanced_query,omitempty"` // LLM-enhanced query with royal processor
 }
 
 // DateRange represents a date range filter

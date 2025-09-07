@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+# Install system dependencies required by docling
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    poppler-utils \
+    tesseract-ocr \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install docling in isolated environment
+RUN pip install --no-cache-dir \
+    docling \
+    fastapi \
+    uvicorn \
+    python-multipart
+
+# Copy application code
+COPY app_docling.py .
+
+EXPOSE 8082
+
+CMD ["uvicorn", "app_docling:app", "--host", "0.0.0.0", "--port", "8082"]

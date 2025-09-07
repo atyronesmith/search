@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -32,6 +33,15 @@ type SearchResult struct {
 	Highlights   []string  `json:"highlights"`
 	Snippet      string    `json:"snippet"`
 	TotalResults int       `json:"totalResults"`
+}
+
+// SearchResponseWithDetails contains search results and enhanced query information
+type SearchResponseWithDetails struct {
+	Results       []SearchResult `json:"results"`
+	EnhancedQuery *EnhancedQuery `json:"enhanced_query,omitempty"`
+	UsedLLM       bool          `json:"used_llm"`
+	SearchTime    int64         `json:"search_time"`
+	TotalCount    int           `json:"total_count"`
 }
 
 // IndexingStatus represents indexing status
@@ -128,6 +138,76 @@ func (a *App) Search(request SearchRequest) ([]SearchResult, error) {
 
 	log.Printf("API search successful, returning %d results", len(results))
 	return results, nil
+}
+
+// SearchWithDetails performs a search and returns enhanced query information
+func (a *App) SearchWithDetails(request SearchRequest) (SearchResponseWithDetails, error) {
+	log.Printf("SearchWithDetails request received: %+v", request)
+	
+	// Call API client search and capture enhanced information
+	results, err := a.apiClient.SearchWithDetails(request)
+	if err != nil {
+		log.Printf("API SearchWithDetails failed: %v", err)
+		// Return basic fallback response
+		basicResults, basicErr := a.Search(request)
+		if basicErr != nil {
+			return SearchResponseWithDetails{}, basicErr
+		}
+		return SearchResponseWithDetails{
+			Results:    basicResults,
+			UsedLLM:    false,
+			SearchTime: 0,
+			TotalCount: len(basicResults),
+		}, nil
+	}
+	
+	// LLM enhancement is now working properly in the backend
+	
+	log.Printf("API SearchWithDetails successful")
+	return results, nil
+}
+
+// IsLLMQuery detects if a query might trigger LLM processing
+func (a *App) IsLLMQuery(query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	
+	// Complex terms that suggest LLM enhancement needed
+	complexTerms := []string{
+		"find all files", "how many files", "files that contain",
+		"social security", "ssn", "credit card", "financial", "banking",
+		"legal", "medical", "health", "doctor", "correspondence",
+		"table", "chart", "graph", "figure", "contain", "similar",
+		"look like", "type of", "kind of", "related to",
+		"last week", "tuesday", "yesterday", "recent", "modified on",
+		"all files", "count", "list all",
+	}
+	
+	// Check for complex terms
+	for _, term := range complexTerms {
+		if strings.Contains(query, term) {
+			return true
+		}
+	}
+	
+	// Check for natural language patterns
+	questionWords := []string{"what", "where", "when", "why", "how", "who", "which"}
+	for _, word := range questionWords {
+		if strings.HasPrefix(query, word+" ") {
+			return true
+		}
+	}
+	
+	// Check if it contains a question mark
+	if strings.Contains(query, "?") {
+		return true
+	}
+	
+	// Check for analytical patterns
+	if strings.Contains(query, "find") && strings.Contains(query, "that") {
+		return true
+	}
+	
+	return false
 }
 
 // StartIndexing starts the indexing process via the API
@@ -261,4 +341,17 @@ func (a *App) ResetDatabase() error {
 	
 	log.Println("Database reset successfully")
 	return nil
+}
+
+// CallAPI makes a generic API call to the backend
+func (a *App) CallAPI(method, endpoint, body string) (string, error) {
+	log.Printf("CallAPI request: %s %s", method, endpoint)
+	
+	response, err := a.apiClient.CallAPI(method, endpoint, body)
+	if err != nil {
+		log.Printf("Failed to call API: %v", err)
+		return "", err
+	}
+	
+	return response, nil
 }

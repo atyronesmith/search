@@ -1,0 +1,33 @@
+CONFIDENTIAL MEDICAL REPORT
+
+Patient ID: MED-2024-0892
+Date: November 15, 2024
+
+Chief Complaint: Persistent headache and fatigue
+
+History of Present Illness:
+The patient presents with chronic migraines that have persisted for approximately three months. Associated symptoms include photophobia, nausea, and occasional vertigo. The patient reports that acetaminophen provides minimal relief.
+
+Medications:
+- Ibuprofen 400mg PRN for pain
+- Sumatriptan 50mg for acute migraine episodes
+- Propranolol 80mg daily for prophylaxis
+
+Vital Signs:
+Blood Pressure: 128/82 mmHg
+Heart Rate: 72 bpm
+Temperature: 98.6°F
+Respiratory Rate: 16 breaths/min
+
+Laboratory Results:
+Hemoglobin: 14.2 g/dL (normal range: 12-16)
+White Blood Cell Count: 7,500 cells/μL
+Thyroid Stimulating Hormone (TSH): 2.8 mIU/L
+Vitamin D: 22 ng/mL (slightly deficient)
+
+Assessment:
+Primary diagnosis: Migraine with aura (G43.1)
+Secondary: Vitamin D deficiency
+
+Treatment Plan:
+Continue current migraine prophylaxis. Prescribe Vitamin D supplementation 2000 IU daily. Follow up in 6 weeks to assess treatment efficacy. Consider neurological consultation if symptoms persist.

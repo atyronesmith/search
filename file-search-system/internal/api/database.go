@@ -89,14 +89,17 @@ func (s *Server) getFiles(req *FileListRequest) ([]database.File, int64, error) 
 		files = append(files, file)
 	}
 	
-	// Get total count
-	countQuery := strings.Replace(queryBuilder.String(), 
-		"SELECT id, path, parent_path, filename, extension, file_type, size_bytes, created_at, modified_at, last_indexed, content_hash, indexing_status, error_message, metadata FROM files",
-		"SELECT COUNT(*) FROM files", 1)
-	countQuery = strings.Split(countQuery, " ORDER BY")[0] // Remove ORDER BY and LIMIT
+	// Get total count - build separate count query
+	countQueryBuilder := strings.Builder{}
+	countQueryBuilder.WriteString("SELECT COUNT(*) FROM files")
+	
+	if len(conditions) > 0 {
+		countQueryBuilder.WriteString(" WHERE ")
+		countQueryBuilder.WriteString(strings.Join(conditions, " AND "))
+	}
 	
 	var total int64
-	err = s.db.QueryRow(ctx, countQuery, args[:len(args)-2]...).Scan(&total)
+	err = s.db.QueryRow(ctx, countQueryBuilder.String(), args[:len(args)-2]...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -295,6 +298,38 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 	var recentlyIndexed int64
 	s.db.QueryRow(ctx, recentQuery).Scan(&recentlyIndexed)
 	
+	// Get database disk usage
+	dbSizeQuery := `
+		SELECT 
+			pg_size_pretty(pg_database_size(current_database())) as total_db_size,
+			pg_size_pretty(pg_total_relation_size('files')) as files_table_size,
+			pg_size_pretty(pg_total_relation_size('chunks')) as chunks_table_size,
+			pg_size_pretty(pg_total_relation_size('text_search')) as text_search_table_size,
+			pg_database_size(current_database()) as total_db_size_bytes,
+			pg_total_relation_size('files') as files_table_size_bytes,
+			pg_total_relation_size('chunks') as chunks_table_size_bytes,
+			pg_total_relation_size('text_search') as text_search_table_size_bytes
+	`
+	
+	var totalDBSize, filesTableSize, chunksTableSize, textSearchTableSize string
+	var totalDBSizeBytes, filesTableSizeBytes, chunksTableSizeBytes, textSearchTableSizeBytes int64
+	err = s.db.QueryRow(ctx, dbSizeQuery).Scan(
+		&totalDBSize, &filesTableSize, &chunksTableSize, &textSearchTableSize,
+		&totalDBSizeBytes, &filesTableSizeBytes, &chunksTableSizeBytes, &textSearchTableSizeBytes,
+	)
+	if err != nil {
+		s.log.WithError(err).Warn("Failed to get database size information")
+		// Set default values on error
+		totalDBSize = "N/A"
+		filesTableSize = "N/A" 
+		chunksTableSize = "N/A"
+		textSearchTableSize = "N/A"
+		totalDBSizeBytes = 0
+		filesTableSizeBytes = 0
+		chunksTableSizeBytes = 0
+		textSearchTableSizeBytes = 0
+	}
+	
 	return map[string]interface{}{
 		"total_files":       stats.TotalFiles,
 		"indexed_files":     stats.IndexedFiles,
@@ -306,6 +341,16 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 		"recently_indexed":  recentlyIndexed,
 		"last_updated":      stats.LastUpdated,
 		"index_completion":  float64(stats.IndexedFiles) / float64(stats.TotalFiles) * 100,
+		"database_size": map[string]interface{}{
+			"total_db_size":           totalDBSize,
+			"files_table_size":        filesTableSize,
+			"chunks_table_size":       chunksTableSize,
+			"text_search_table_size":  textSearchTableSize,
+			"total_db_size_bytes":     totalDBSizeBytes,
+			"files_table_size_bytes":  filesTableSizeBytes,
+			"chunks_table_size_bytes": chunksTableSizeBytes,
+			"text_search_table_size_bytes": textSearchTableSizeBytes,
+		},
 	}, nil
 }
 
@@ -330,17 +375,29 @@ func (s *Server) getSystemStatus() (*SystemStatus, error) {
 	// Get cache stats
 	cacheStats := s.searchEngine.GetCacheStats()
 	
+	// Extract database size from stats
+	var databaseSize int64 = 0
+	var databaseSizeInfo map[string]interface{}
+	if dbSizeInfo, ok := stats["database_size"].(map[string]interface{}); ok {
+		databaseSizeInfo = dbSizeInfo
+		if totalSizeBytes, ok := dbSizeInfo["total_db_size_bytes"].(int64); ok {
+			databaseSize = totalSizeBytes
+		}
+	}
+
 	status := &SystemStatus{
-		Version:        "1.0.0",
-		Uptime:         time.Since(s.service.GetStartTime()),
-		IndexingActive: indexingStatus["active"].(bool),
-		IndexingPaused: indexingStatus["paused"].(bool),
-		TotalFiles:     stats["total_files"].(int64),
-		IndexedFiles:   stats["indexed_files"].(int64),
-		PendingFiles:   stats["pending_files"].(int64),
-		FailedFiles:    stats["failed_files"].(int64),
-		CacheSize:      cacheStats.Size,
-		ResourceUsage:  resourceUsage,
+		Version:          "1.0.0",
+		Uptime:           time.Since(s.service.GetStartTime()),
+		IndexingActive:   indexingStatus["active"].(bool),
+		IndexingPaused:   indexingStatus["paused"].(bool),
+		TotalFiles:       stats["total_files"].(int64),
+		IndexedFiles:     stats["indexed_files"].(int64),
+		PendingFiles:     stats["pending_files"].(int64),
+		FailedFiles:      stats["failed_files"].(int64),
+		DatabaseSize:     databaseSize,
+		DatabaseSizeInfo: databaseSizeInfo,
+		CacheSize:        cacheStats.Size,
+		ResourceUsage:    resourceUsage,
 	}
 	
 	return status, nil
