@@ -1,0 +1,37 @@
+FROM python:3.11-slim
+
+# Install system dependencies required by docling
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    poppler-utils \
+    tesseract-ocr \
+    libmagic1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+# Note: Using conda-exported requirements for compatibility
+COPY requirements-docling.txt .
+
+# Install Python packages with compatible versions
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-docling.txt
+
+# Copy application code
+COPY app_docling.py .
+
+# Create non-root user
+RUN useradd -m -u 1000 docling && chown -R docling:docling /app
+USER docling
+
+# Expose port
+EXPOSE 8082
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8082/health || exit 1
+
+# Run the application
+CMD ["python", "app_docling.py"]

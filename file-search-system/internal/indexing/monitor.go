@@ -68,6 +68,33 @@ func (m *Monitor) Stop() error {
 	return m.watcher.Close()
 }
 
+// UpdatePaths updates the watch paths and ignore patterns
+func (m *Monitor) UpdatePaths(watchPaths []string, ignorePatterns []string) error {
+	// Close existing watcher
+	if m.watcher != nil {
+		m.watcher.Close()
+	}
+
+	// Create new watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+
+	// Update configuration
+	m.watcher = watcher
+	m.watchPaths = watchPaths
+	m.ignorePatterns = ignorePatterns
+	m.changesChan = make(chan FileChange, 1000)
+
+	m.log.WithFields(logrus.Fields{
+		"watch_paths":     watchPaths,
+		"ignore_patterns": ignorePatterns,
+	}).Info("Updated monitor configuration")
+
+	return nil
+}
+
 // GetChangesChan returns the channel for receiving file changes
 func (m *Monitor) GetChangesChan() <-chan FileChange {
 	return m.changesChan

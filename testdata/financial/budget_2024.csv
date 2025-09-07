@@ -1,0 +1,11 @@
+Month,Category,Budgeted,Actual,Variance,Status
+January,Salaries,250000,245000,5000,Under Budget
+January,Marketing,50000,55000,-5000,Over Budget
+January,Operations,75000,72000,3000,Under Budget
+February,Salaries,250000,248000,2000,Under Budget
+February,Marketing,45000,44000,1000,Under Budget
+February,Operations,80000,85000,-5000,Over Budget
+March,Salaries,260000,265000,-5000,Over Budget
+March,Marketing,60000,58000,2000,Under Budget
+March,Operations,70000,69000,1000,Under Budget
+Q1 Total,All Categories,1140000,1141000,-1000,On Track

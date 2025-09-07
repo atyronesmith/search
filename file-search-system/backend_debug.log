@@ -1,0 +1,32 @@
+{"error":"process does not exist","level":"warning","msg":"Could not get current process for monitoring","time":"2025-09-06T18:55:44-04:00"}
+{"level":"info","msg":"Starting background service","time":"2025-09-06T18:55:45-04:00"}
+{"level":"info","msg":"Starting resource monitor","time":"2025-09-06T18:55:45-04:00"}
+{"level":"info","msg":"Starting event processor","time":"2025-09-06T18:55:45-04:00"}
+{"level":"info","msg":"Starting stats updater","time":"2025-09-06T18:55:45-04:00"}
+{"level":"info","msg":"Starting indexing loop with parallel workers","time":"2025-09-06T18:55:45-04:00","workers":4}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T18:55:45-04:00","worker_id":3}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T18:55:45-04:00","worker_id":0}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T18:55:45-04:00","worker_id":1}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T18:55:45-04:00","worker_id":2}
+{"ignore_patterns":[".*","~*","*.tmp","__pycache__","node_modules",".git","*.log","*.photoslibrary/**","**/Spotlight/**","**/Caches/**","**/Cache/**"],"level":"info","msg":"Updated monitor configuration","time":"2025-09-06T18:55:45-04:00","watch_paths":["/home/user/dev/testsearch"]}
+{"level":"info","msg":"File monitoring started with database configuration","paths":["/home/user/dev/testsearch"],"time":"2025-09-06T18:55:45-04:00"}
+{"level":"info","msg":"Background service started successfully","time":"2025-09-06T18:55:45-04:00"}
+{"level":"info","msg":"Starting file changes processor","time":"2025-09-06T18:55:45-04:00"}
+{"event_type":"service_started","level":"info","message":"Background service started successfully","msg":"System event","time":"2025-09-06T18:55:45-04:00"}
+{"address":"127.0.0.1:8080","level":"info","msg":"Starting API server","time":"2025-09-06T18:55:45-04:00"}
+{"address":"127.0.0.1:8080","level":"info","msg":"Starting API server","time":"2025-09-06T18:55:45-04:00"}
+{"error":"listen tcp 127.0.0.1:8080: bind: address already in use","level":"error","msg":"API server stopped","time":"2025-09-06T18:55:45-04:00"}
+{"error":"failed to add new file: failed to insert file: pq: duplicate key value violates unique constraint \"files_path_key\"","level":"error","msg":"Failed to handle file change","path":"/home/user/dev/testsearch/Arlene.docx","time":"2025-09-06T19:11:12-04:00"}
+{"error":"failed to add new file: failed to insert file: pq: duplicate key value violates unique constraint \"files_path_key\"","level":"error","msg":"Failed to handle file change","path":"/home/user/dev/testsearch/As World War 2 came to a close.docx","time":"2025-09-06T19:11:12-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/solar.pdf","time":"2025-09-06T22:32:18-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/Doc2.docx","time":"2025-09-06T22:32:18-04:00"}
+{"error":"failed to add new file: failed to insert file: pq: duplicate key value violates unique constraint \"files_path_key\"","level":"error","msg":"Failed to handle file change","path":"/home/user/dev/testsearch/testdata/literature/adventure_survival.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/scifi_space_opera.txt","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/shakespeare_sonnet.txt","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/adventure_survival.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/horror_gothic.txt","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/mystery_noir.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/philosophical_essay.txt","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/literature/romantic_poetry.txt","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/README.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/home/user/dev/testsearch/testdata/personal_info.txt","time":"2025-09-06T22:33:00-04:00"}

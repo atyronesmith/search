@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Alternative service with Python 3.13 compatible libraries
+  doc-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8081
+    volumes:
+      - /tmp:/tmp:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Docling service with Python 3.11 (conda-based)
+  docling:
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HOME=/tmp/huggingface
+      - TRANSFORMERS_CACHE=/tmp/transformers
+      - TORCH_HOME=/tmp/torch
+    volumes:
+      - /tmp:/tmp
+      - ./downloads:/downloads:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # Docling with ML models needs more memory
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Redis for caching processed documents (optional)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+volumes:
+  redis-data:

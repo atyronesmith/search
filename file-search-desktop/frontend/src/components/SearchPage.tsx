@@ -12,18 +12,38 @@ interface SearchResult {
   snippet: string
 }
 
+interface EnhancedQuery {
+  original: string
+  enhanced: string
+  search_terms: string[]
+  intent: string
+  requires_count: boolean
+}
+
+interface SearchResponseWithDetails {
+  results: SearchResult[]
+  enhanced_query?: EnhancedQuery
+  used_llm: boolean
+  search_time: number
+  total_count: number
+}
+
 interface SearchPageProps {
   onSearch: (query: string, offset?: number, append?: boolean) => void
+  onSearchWithDetails: (query: string, results: SearchResult[], append?: boolean) => void
   searchQuery: string
   searchResults: SearchResult[]
 }
 
-function SearchPage({ onSearch, searchQuery, searchResults }: SearchPageProps) {
+function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults }: SearchPageProps) {
   const [query, setQuery] = useState(searchQuery)
   const [loading, setLoading] = useState(false)
+  const [isLLMQuery, setIsLLMQuery] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalResults, setTotalResults] = useState(0)
+  const [enhancedQuery, setEnhancedQuery] = useState<EnhancedQuery | null>(null)
+  const [usedLLM, setUsedLLM] = useState(false)
   const resultsPerPage = 10
 
   const handleSearch = async () => {
@@ -31,10 +51,49 @@ function SearchPage({ onSearch, searchQuery, searchResults }: SearchPageProps) {
     
     setLoading(true)
     setCurrentPage(1)  // Reset to first page
+    
+    // Check if this might be an LLM query (conservative prediction)
     try {
-      await onSearch(query, 0, false)
+      const isLLM = await window.go.main.App.IsLLMQuery(query)
+      setIsLLMQuery(isLLM)
+    } catch (error) {
+      console.warn('Failed to check LLM query status:', error)
+      setIsLLMQuery(false)
+    }
+    
+    try {
+      // Try SearchWithDetails first to get enhanced query information
+      try {
+        const searchResponse: SearchResponseWithDetails = await window.go.main.App.SearchWithDetails({
+          query: query,
+          limit: resultsPerPage,
+          offset: 0
+        })
+        
+        // Update enhanced query state based on backend response
+        setEnhancedQuery(searchResponse.enhanced_query || null)
+        setUsedLLM(searchResponse.used_llm)
+        
+        // Update LLM query status based on actual backend response
+        setIsLLMQuery(searchResponse.used_llm)
+        
+        // Use the SearchWithDetails results directly instead of calling onSearch
+        // This preserves the LLM-enhanced results instead of making a second regular search call
+        console.log('Using SearchWithDetails results directly, bypassing onSearch to preserve LLM enhancement')
+        
+        // Update parent component with the enhanced search results
+        onSearchWithDetails(query, searchResponse.results || [], false)
+        
+      } catch (detailsError) {
+        console.warn('SearchWithDetails failed, falling back to regular search:', detailsError)
+        // Fallback to regular search
+        await onSearch(query, 0, false)
+        setEnhancedQuery(null)
+        setUsedLLM(false)
+      }
     } finally {
       setLoading(false)
+      setIsLLMQuery(false)
     }
   }
 
@@ -123,6 +182,222 @@ function SearchPage({ onSearch, searchQuery, searchResults }: SearchPageProps) {
           </button>
         </div>
       </div>
+
+      {/* Enhanced Query Display */}
+      {enhancedQuery && usedLLM && !loading && (
+        <div style={{
+          backgroundColor: '#f8f9fa',
+          border: '2px solid #007bff',
+          borderRadius: '8px',
+          padding: '15px',
+          margin: '15px 0',
+          fontSize: '14px'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            marginBottom: '10px',
+            fontWeight: 'bold',
+            color: '#007bff'
+          }}>
+            <span style={{ fontSize: '20px', marginRight: '8px' }}>🧠</span>
+            AI Enhanced Search Query
+          </div>
+          
+          {enhancedQuery.enhanced !== enhancedQuery.original && (
+            <div style={{ marginBottom: '8px' }}>
+              <strong>Enhanced terms:</strong>{' '}
+              <code style={{
+                backgroundColor: '#e9ecef',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '13px'
+              }}>
+                {enhancedQuery.enhanced}
+              </code>
+            </div>
+          )}
+          
+          {enhancedQuery.search_terms && enhancedQuery.search_terms.length > 0 && (
+            <div style={{ marginBottom: '8px' }}>
+              <strong>Search terms:</strong>{' '}
+              {enhancedQuery.search_terms.map((term, index) => (
+                <span key={index}>
+                  <code style={{
+                    backgroundColor: '#e9ecef',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    marginRight: '4px'
+                  }}>
+                    {term}
+                  </code>
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {enhancedQuery.intent && (
+            <div style={{ marginBottom: '8px' }}>
+              <strong>Query intent:</strong>{' '}
+              <span style={{
+                backgroundColor: '#d4edda',
+                color: '#155724',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                textTransform: 'uppercase',
+                fontWeight: 'bold'
+              }}>
+                {enhancedQuery.intent}
+              </span>
+            </div>
+          )}
+          
+          {enhancedQuery.requires_count && (
+            <div style={{
+              fontSize: '12px',
+              color: '#666',
+              fontStyle: 'italic'
+            }}>
+              ℹ️ This query was identified as requesting a count of results
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LLM Processing Animation */}
+      {loading && isLLMQuery && (
+        <div className="llm-loading-container" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px 20px',
+          backgroundColor: '#f8f9fa',
+          border: '2px dashed #007bff',
+          borderRadius: '12px',
+          margin: '20px 0',
+          animation: 'pulse 2s ease-in-out infinite'
+        }}>
+          <div style={{
+            fontSize: '48px',
+            marginBottom: '20px',
+            animation: 'bounce 1.5s ease-in-out infinite'
+          }}>
+            🧠
+          </div>
+          <div style={{
+            fontSize: '20px',
+            fontWeight: 'bold',
+            color: '#007bff',
+            marginBottom: '10px'
+          }}>
+            🤖 AI Enhancement Active
+          </div>
+          <div style={{
+            fontSize: '16px',
+            color: '#666',
+            textAlign: 'center',
+            marginBottom: '20px',
+            maxWidth: '500px'
+          }}>
+            Your natural language query is being processed by our AI system for intelligent search...
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '15px'
+          }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                style={{
+                  width: '12px',
+                  height: '12px',
+                  backgroundColor: '#007bff',
+                  borderRadius: '50%',
+                  animation: `wave 1.4s ease-in-out ${i * 0.2}s infinite`
+                }}
+              />
+            ))}
+          </div>
+          <div style={{
+            fontSize: '14px',
+            color: '#888',
+            fontStyle: 'italic'
+          }}>
+            Analyzing • Classifying • Enhancing • Searching
+          </div>
+          
+          <style>
+            {`
+              @keyframes pulse {
+                0%, 100% { 
+                  border-color: #007bff; 
+                  background-color: #f8f9fa; 
+                }
+                50% { 
+                  border-color: #0056b3; 
+                  background-color: #e3f2fd; 
+                }
+              }
+              
+              @keyframes bounce {
+                0%, 20%, 50%, 80%, 100% {
+                  transform: translateY(0);
+                }
+                40% {
+                  transform: translateY(-10px);
+                }
+                60% {
+                  transform: translateY(-5px);
+                }
+              }
+              
+              @keyframes wave {
+                0%, 40%, 100% {
+                  transform: scaleY(0.4);
+                  opacity: 0.5;
+                }
+                20% {
+                  transform: scaleY(1);
+                  opacity: 1;
+                }
+              }
+            `}
+          </style>
+        </div>
+      )}
+
+      {/* Regular Loading Animation */}
+      {loading && !isLLMQuery && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '40px',
+          fontSize: '18px',
+          color: '#666'
+        }}>
+          <div style={{
+            marginRight: '10px',
+            animation: 'spin 1s linear infinite'
+          }}>
+            🔄
+          </div>
+          Searching...
+          
+          <style>
+            {`
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+            `}
+          </style>
+        </div>
+      )}
 
       {searchResults.length > 0 && (
         <div className="search-results">

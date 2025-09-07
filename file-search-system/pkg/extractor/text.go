@@ -34,6 +34,18 @@ func NewTextExtractor(config *ExtractorConfig) *TextExtractor {
 
 // CanExtract checks if this extractor can handle the file
 func (e *TextExtractor) CanExtract(filePath string) bool {
+	// Exclude files that should be handled by DoclingExtractor
+	ext := strings.ToLower(filepath.Ext(filePath))
+	doclingExtensions := map[string]bool{
+		".md":   true, // Markdown - better handled by Docling
+		".html": true, // HTML - better handled by Docling  
+		".htm":  true, // HTML - better handled by Docling
+	}
+	
+	if doclingExtensions[ext] {
+		return false
+	}
+	
 	// First check if it's a known binary file
 	if IsBinaryFile(filePath) {
 		return false
@@ -118,7 +130,8 @@ func (e *TextExtractor) GetName() string {
 
 // GetSupportedExtensions returns supported extensions
 func (e *TextExtractor) GetSupportedExtensions() []string {
-	return []string{".txt", ".md", ".rtf", ".csv", ".tsv", ".log", ".conf", ".cfg", ".ini", ".env"}
+	// Note: .md is handled by DoclingExtractor for better structured parsing
+	return []string{".txt", ".rtf", ".csv", ".tsv", ".log", ".conf", ".cfg", ".ini", ".env"}
 }
 
 // readWithEncoding reads file content with encoding detection

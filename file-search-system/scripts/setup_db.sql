@@ -35,7 +35,11 @@ CREATE TABLE files (
     content_hash TEXT, -- SHA-256 for change detection
     indexing_status TEXT DEFAULT 'pending' CHECK (indexing_status IN ('pending', 'processing', 'completed', 'error', 'skipped')),
     error_message TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb -- Store document-specific metadata
+    metadata JSONB DEFAULT '{}'::jsonb, -- Store document-specific metadata
+    royal_metadata JSONB DEFAULT '{}'::jsonb, -- Comprehensive royal metadata schema
+    has_structured_content BOOLEAN DEFAULT FALSE, -- Whether file has been processed for structured content extraction
+    extraction_method VARCHAR(50), -- Method used for content extraction (docling, pypdfium2, etc.)
+    structure_version VARCHAR(20) DEFAULT '1.0' -- Version of structure extraction schema used
 );
 
 -- Document chunks with embeddings for vector search
@@ -51,7 +55,24 @@ CREATE TABLE chunks (
     char_end INTEGER NOT NULL,
     chunk_type TEXT CHECK (chunk_type IN ('semantic', 'code', 'table', 'list', 'sliding')),
     metadata JSONB DEFAULT '{}'::jsonb,
+    element_id BIGINT, -- Reference to document_elements for structured content
     UNIQUE(file_id, chunk_index)
+);
+
+-- Document elements for structured content (from Unstructured.io, Docling, etc.)
+CREATE TABLE document_elements (
+    id BIGSERIAL PRIMARY KEY,
+    file_id BIGINT REFERENCES files(id) ON DELETE CASCADE,
+    element_type VARCHAR(50) NOT NULL, -- Title, NarrativeText, Table, ListItem, etc.
+    content TEXT NOT NULL,
+    page_number INTEGER DEFAULT 0,
+    structure_data JSONB, -- Element-specific structural information
+    bbox JSONB, -- Bounding box coordinates for visual elements
+    parent_element_id BIGINT REFERENCES document_elements(id) ON DELETE SET NULL,
+    element_order INTEGER DEFAULT 0, -- Order within the document
+    extraction_method VARCHAR(50), -- Which extractor created this element
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Full-text search index (for BM25)
@@ -111,14 +132,35 @@ CREATE INDEX idx_files_modified ON files(modified_at DESC);
 CREATE INDEX idx_files_status ON files(indexing_status);
 CREATE INDEX idx_files_type ON files(file_type);
 CREATE INDEX idx_files_hash ON files(content_hash);
+-- Royal metadata indexes for enhanced search
+CREATE INDEX idx_files_royal_metadata ON files USING GIN (royal_metadata);
+CREATE INDEX idx_files_extraction_method ON files(extraction_method);
+CREATE INDEX idx_files_structured ON files(has_structured_content) WHERE has_structured_content = TRUE;
+CREATE INDEX idx_files_document_type ON files ((royal_metadata->>'document_type'));
+CREATE INDEX idx_files_department ON files ((royal_metadata->>'department'));
+CREATE INDEX idx_files_project_name ON files ((royal_metadata->>'project_name'));
+CREATE INDEX idx_files_language ON files ((royal_metadata->>'language'));
+CREATE INDEX idx_files_content_date ON files ((royal_metadata->>'content_date'));
 
 CREATE INDEX idx_chunks_file ON chunks(file_id);
+CREATE INDEX idx_chunks_element_id ON chunks(element_id);
 CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 CREATE INDEX idx_text_search_content ON text_search USING GIN (tsv_content);
 CREATE INDEX idx_text_search_title ON text_search USING GIN (title_tsv);
 CREATE INDEX idx_text_search_file ON text_search(file_id);
 CREATE INDEX idx_text_search_chunk ON text_search(chunk_id);
+
+-- Document elements indexes
+CREATE INDEX idx_document_elements_file_id ON document_elements(file_id);
+CREATE INDEX idx_document_elements_type ON document_elements(element_type);
+CREATE INDEX idx_document_elements_page ON document_elements(page_number);
+CREATE INDEX idx_document_elements_parent ON document_elements(parent_element_id);
+CREATE INDEX idx_document_elements_order ON document_elements(element_order);
+CREATE INDEX idx_document_elements_extraction ON document_elements(extraction_method);
+CREATE INDEX idx_document_elements_content_fts ON document_elements USING GIN (to_tsvector('english', content));
+CREATE INDEX idx_document_elements_structure ON document_elements USING GIN (structure_data);
+CREATE INDEX idx_document_elements_bbox ON document_elements USING GIN (bbox);
 
 CREATE INDEX idx_file_changes_unprocessed ON file_changes(processed) WHERE processed = FALSE;
 CREATE INDEX idx_file_changes_path ON file_changes(file_path);
@@ -242,6 +284,81 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Add foreign key constraints for enhanced schema
+ALTER TABLE chunks ADD CONSTRAINT chunks_element_id_fkey 
+    FOREIGN KEY (element_id) REFERENCES document_elements(id) ON DELETE SET NULL;
+
+-- Royal metadata functions
+CREATE OR REPLACE FUNCTION update_royal_metadata(
+    file_id bigint,
+    metadata_json jsonb
+) RETURNS void AS $$
+BEGIN
+    UPDATE files 
+    SET royal_metadata = royal_metadata || metadata_json,
+        last_indexed = now()
+    WHERE id = file_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION analyze_corpus_metadata()
+RETURNS jsonb AS $$
+DECLARE
+    result jsonb;
+BEGIN
+    WITH metadata_stats AS (
+        SELECT 
+            array_agg(DISTINCT royal_metadata->>'document_type') FILTER (WHERE royal_metadata->>'document_type' IS NOT NULL) as doc_types,
+            array_agg(DISTINCT royal_metadata->>'department') FILTER (WHERE royal_metadata->>'department' IS NOT NULL) as departments,
+            array_agg(DISTINCT royal_metadata->>'project_name') FILTER (WHERE royal_metadata->>'project_name' IS NOT NULL) as projects,
+            array_agg(DISTINCT royal_metadata->>'language') FILTER (WHERE royal_metadata->>'language' IS NOT NULL) as languages,
+            min((royal_metadata->>'content_date')::timestamp) as min_date,
+            max((royal_metadata->>'content_date')::timestamp) as max_date,
+            count(*) as total_files
+        FROM files 
+        WHERE royal_metadata != '{}'
+    )
+    SELECT jsonb_build_object(
+        'document_types', COALESCE(doc_types, ARRAY[]::text[]),
+        'departments', COALESCE(departments, ARRAY[]::text[]),
+        'projects', COALESCE(projects, ARRAY[]::text[]),
+        'languages', COALESCE(languages, ARRAY[]::text[]),
+        'date_range', jsonb_build_object(
+            'start', min_date,
+            'end', max_date
+        ),
+        'total_files', total_files,
+        'analysis_date', now()
+    ) INTO result
+    FROM metadata_stats;
+    
+    RETURN COALESCE(result, '{}'::jsonb);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update structured content flag
+CREATE OR REPLACE FUNCTION update_structured_content_flag()
+RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE files SET has_structured_content = TRUE WHERE id = NEW.file_id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        -- Check if any elements remain
+        IF NOT EXISTS (SELECT 1 FROM document_elements WHERE file_id = OLD.file_id) THEN
+            UPDATE files SET has_structured_content = FALSE WHERE id = OLD.file_id;
+        END IF;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER document_elements_structured_flag
+    AFTER INSERT OR DELETE ON document_elements
+    FOR EACH ROW
+    EXECUTE FUNCTION update_structured_content_flag();
+
 -- Grant permissions (adjust user as needed)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO file_search_user;
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO file_search_user;
@@ -253,13 +370,16 @@ COMMENT ON TABLE text_search IS 'Full-text search index for BM25 ranking';
 COMMENT ON TABLE file_changes IS 'Tracks file system changes for incremental indexing';
 COMMENT ON TABLE search_cache IS 'Caches search results for performance';
 COMMENT ON TABLE indexing_rules IS 'Configurable rules for directory indexing priorities';
+COMMENT ON TABLE document_elements IS 'Structured document elements from advanced extractors';
 COMMENT ON MATERIALIZED VIEW document_hierarchy IS 'Hierarchical view of indexed documents';
+COMMENT ON COLUMN files.royal_metadata IS 'Comprehensive document metadata following the Royal Metadata Schema';
 
 -- Success message
 DO $$
 BEGIN
     RAISE NOTICE 'Database setup completed successfully!';
-    RAISE NOTICE 'Tables created: files, chunks, text_search, file_changes, search_cache, indexing_rules';
-    RAISE NOTICE 'Indexes and triggers configured';
+    RAISE NOTICE 'Tables created: files, chunks, document_elements, text_search, file_changes, search_cache, indexing_rules';
+    RAISE NOTICE 'Royal metadata schema with comprehensive indexing enabled';
+    RAISE NOTICE 'Indexes and triggers configured for enhanced search';
     RAISE NOTICE 'Default indexing rules inserted';
 END $$;

@@ -23,6 +23,7 @@ import (
 type Server struct {
 	config      *config.Config
 	db          *database.DB
+	dbConfig    *config.DBConfigService
 	searchEngine *search.Engine
 	service     *service.Service
 	router      *mux.Router
@@ -39,6 +40,7 @@ func NewServer(cfg *config.Config, db *database.DB, svc *service.Service, log *l
 	s := &Server{
 		config:       cfg,
 		db:           db,
+		dbConfig:     config.NewDBConfigService(db),
 		service:      svc,
 		searchEngine: svc.GetSearchEngine(), // Get search engine from service
 		log:          log,
@@ -121,6 +123,12 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/indexing/resume", s.handleResumeIndexing).Methods("POST", "OPTIONS")
 	api.HandleFunc("/indexing/status", s.handleIndexingStatus).Methods("GET", "OPTIONS")
 
+	// File monitoring control endpoints
+	api.HandleFunc("/monitoring/start", s.handleStartMonitoring).Methods("POST", "OPTIONS")
+	api.HandleFunc("/monitoring/stop", s.handleStopMonitoring).Methods("POST", "OPTIONS")
+	api.HandleFunc("/monitoring/restart", s.handleRestartMonitoring).Methods("POST", "OPTIONS")
+	api.HandleFunc("/monitoring/status", s.handleMonitoringStatus).Methods("GET", "OPTIONS")
+
 	// Database reset endpoint
 	api.HandleFunc("/database/reset", s.handleDatabaseReset).Methods("POST", "OPTIONS")
 	
@@ -133,6 +141,9 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/metrics", s.handleMetrics).Methods("GET", "OPTIONS")
 	api.HandleFunc("/config", s.handleGetConfig).Methods("GET", "OPTIONS")
 	api.HandleFunc("/config", s.handleUpdateConfig).Methods("PUT", "OPTIONS")
+	
+	// Ollama endpoints
+	api.HandleFunc("/ollama/models", s.handleGetOllamaModels).Methods("GET", "OPTIONS")
 
 	// WebSocket endpoint
 	api.HandleFunc("/ws", s.handleWebSocket)
@@ -194,6 +205,7 @@ type SystemStatus struct {
 	PendingFiles     int64                  `json:"pending_files"`
 	FailedFiles      int64                  `json:"failed_files"`
 	DatabaseSize     int64                  `json:"database_size"`
+	DatabaseSizeInfo map[string]interface{} `json:"database_size_info"`
 	CacheSize        int                    `json:"cache_size"`
 	ActiveSearches   int                    `json:"active_searches"`
 	ResourceUsage    ResourceUsage          `json:"resource_usage"`

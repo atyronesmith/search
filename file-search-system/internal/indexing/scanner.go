@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/file-search/file-search-system/internal/database"
+	"github.com/file-search/file-search-system/pkg/filesystem"
 	"github.com/sirupsen/logrus"
 )
 
@@ -120,7 +120,7 @@ func (s *Scanner) processFile(ctx context.Context, path string, info os.FileInfo
 			return nil
 		}
 		// File has changed, mark for reindexing
-		return s.markFileForReindexing(ctx, existingFile.ID, hash)
+		return s.markFileForReindexing(ctx, existingFile.ID, path, info, hash)
 	}
 
 	// New file, add to database
@@ -215,7 +215,13 @@ func (s *Scanner) getFileByPath(ctx context.Context, path string) (*database.Fil
 }
 
 // markFileForReindexing marks a file for reindexing
-func (s *Scanner) markFileForReindexing(ctx context.Context, fileID int64, newHash string) error {
+func (s *Scanner) markFileForReindexing(ctx context.Context, fileID int64, path string, info os.FileInfo, newHash string) error {
+	// Get proper filesystem timestamps - we only need the modification time for updates
+	timestamps := filesystem.GetFileTimestampsFromInfo(path, info)
+	if s.log != nil {
+		s.log.Debugf("File %s changed: new modified time=%v", path, timestamps.ModifiedAt)
+	}
+	
 	query := `
 		UPDATE files 
 		SET content_hash = $1, 
@@ -223,7 +229,7 @@ func (s *Scanner) markFileForReindexing(ctx context.Context, fileID int64, newHa
 		    modified_at = $2
 		WHERE id = $3
 	`
-	_, err := s.db.Exec(ctx, query, newHash, time.Now(), fileID)
+	_, err := s.db.Exec(ctx, query, newHash, timestamps.ModifiedAt, fileID)
 	if err != nil {
 		return err
 	}
@@ -243,6 +249,16 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 	ext := filepath.Ext(filename)
 	fileType := s.determineFileType(ext)
 	
+	// Get proper filesystem timestamps
+	timestamps := filesystem.GetFileTimestampsFromInfo(path, info)
+	if s.log != nil {
+		if timestamps.HasBirthTime {
+			s.log.Debugf("File %s: created=%v, modified=%v", path, timestamps.CreatedAt, timestamps.ModifiedAt)
+		} else {
+			s.log.Debugf("File %s: using modtime for both timestamps (%v)", path, timestamps.ModifiedAt)
+		}
+	}
+	
 	query := `
 		INSERT INTO files (
 			path, filename, extension, file_type, size_bytes,
@@ -256,7 +272,7 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 	
 	_, err := s.db.Exec(ctx, query,
 		path, filename, ext, fileType, info.Size(),
-		info.ModTime(), info.ModTime(), hash,
+		timestamps.CreatedAt, timestamps.ModifiedAt, hash,
 	)
 	
 	if err != nil {

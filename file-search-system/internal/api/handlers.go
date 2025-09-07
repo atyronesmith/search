@@ -237,7 +237,21 @@ func (s *Server) handleStartIndexing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	if err := s.service.StartIndexing(req.Paths, req.Recursive); err != nil {
+	// If no paths provided, use configured watch paths from database
+	paths := req.Paths
+	if len(paths) == 0 {
+		// Try to get watch paths from database config first
+		dbConfig, err := s.dbConfig.GetConfig(r.Context())
+		if err != nil {
+			s.log.WithError(err).Warn("Failed to get database config, falling back to environment config")
+			paths = s.config.WatchPaths
+		} else {
+			paths = dbConfig.WatchPaths
+		}
+		s.log.WithField("paths", paths).Info("Using configured watch paths for indexing")
+	}
+	
+	if err := s.service.StartIndexing(paths, req.Recursive); err != nil {
 		s.log.WithError(err).Error("Failed to start indexing")
 		s.sendError(w, http.StatusInternalServerError, "failed to start indexing")
 		return
@@ -376,7 +390,23 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	// Return sanitized config (remove sensitive values)
+	// Use database configuration service if available
+	if s.dbConfig != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		
+		config, err := s.dbConfig.GetConfigMap(ctx)
+		if err != nil {
+			s.log.WithError(err).Error("Failed to get config from database")
+			s.sendError(w, http.StatusInternalServerError, "failed to get configuration")
+			return
+		}
+		
+		s.sendSuccess(w, config)
+		return
+	}
+	
+	// Fallback to file-based config (legacy)
 	config := map[string]interface{}{
 		"api_host":           s.config.APIHost,
 		"api_port":           s.config.APIPort,
@@ -408,7 +438,35 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Apply configuration updates (implement validation)
+	// Use database configuration service if available
+	if s.dbConfig != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		
+		if err := s.dbConfig.UpdateConfig(ctx, updates); err != nil {
+			s.log.WithError(err).Error("Failed to update config in database")
+			s.sendError(w, http.StatusInternalServerError, "failed to update configuration")
+			return
+		}
+		
+		s.log.WithField("updates", updates).Info("Configuration updated in database")
+		
+		// Check if watch_paths or ignore_patterns were updated
+		if _, hasWatchPaths := updates["watch_paths"]; hasWatchPaths {
+			s.log.Info("Watch paths updated, restarting file monitoring")
+			if err := s.service.RestartFileMonitoring(); err != nil {
+				s.log.WithError(err).Error("Failed to restart file monitoring after config update")
+				// Don't fail the config update if monitoring restart fails
+			}
+		}
+		
+		s.sendSuccess(w, map[string]interface{}{
+			"message": "configuration updated successfully",
+		})
+		return
+	}
+	
+	// Fallback to legacy file-based config update
 	if err := s.updateConfig(updates); err != nil {
 		s.log.WithError(err).Error("Failed to update config")
 		s.sendError(w, http.StatusBadRequest, "invalid configuration")
@@ -497,4 +555,68 @@ func (s *Server) handleWSClient(conn *websocket.Conn) {
 		// Reset read deadline
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	}
+}
+
+// Ollama handlers
+
+func (s *Server) handleGetOllamaModels(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	
+	models, err := s.dbConfig.GetOllamaModels(ctx)
+	if err != nil {
+		s.log.WithError(err).Error("Failed to get Ollama models")
+		s.sendError(w, http.StatusInternalServerError, "failed to get Ollama models")
+		return
+	}
+	
+	s.sendSuccess(w, map[string]interface{}{
+		"models": models,
+	})
+}
+
+// Monitoring handlers
+
+func (s *Server) handleStartMonitoring(w http.ResponseWriter, r *http.Request) {
+	if err := s.service.StartFileMonitoring(); err != nil {
+		s.log.WithError(err).Error("Failed to start file monitoring")
+		s.sendError(w, http.StatusInternalServerError, "failed to start file monitoring")
+		return
+	}
+	
+	s.sendSuccess(w, map[string]interface{}{
+		"message": "file monitoring started",
+	})
+}
+
+func (s *Server) handleStopMonitoring(w http.ResponseWriter, r *http.Request) {
+	if err := s.service.StopFileMonitoring(); err != nil {
+		s.log.WithError(err).Error("Failed to stop file monitoring")
+		s.sendError(w, http.StatusInternalServerError, "failed to stop file monitoring")
+		return
+	}
+	
+	s.sendSuccess(w, map[string]interface{}{
+		"message": "file monitoring stopped",
+	})
+}
+
+func (s *Server) handleRestartMonitoring(w http.ResponseWriter, r *http.Request) {
+	if err := s.service.RestartFileMonitoring(); err != nil {
+		s.log.WithError(err).Error("Failed to restart file monitoring")
+		s.sendError(w, http.StatusInternalServerError, "failed to restart file monitoring")
+		return
+	}
+	
+	s.sendSuccess(w, map[string]interface{}{
+		"message": "file monitoring restarted",
+	})
+}
+
+func (s *Server) handleMonitoringStatus(w http.ResponseWriter, r *http.Request) {
+	stats := s.service.GetStats()
+	
+	s.sendSuccess(w, map[string]interface{}{
+		"active": stats.MonitoringActive,
+	})
 }
