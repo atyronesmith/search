@@ -22,7 +22,7 @@ func NewAPIClient(baseURL string) *APIClient {
 	return &APIClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 120 * time.Second, // Increased timeout for LLM processing
 		},
 	}
 }
@@ -35,17 +35,30 @@ type SearchAPIRequest struct {
 	Offset  int                    `json:"offset"`
 }
 
+// EnhancedQuery represents LLM-enhanced query details
+type EnhancedQuery struct {
+	Original         string                   `json:"original"`
+	Enhanced         string                   `json:"enhanced"`
+	SearchTerms      []string                 `json:"search_terms"`
+	ContentFilters   []interface{}            `json:"content_filters"`
+	MetadataFilters  []interface{}            `json:"metadata_filters"`
+	Intent           string                   `json:"intent"`
+	RequiresCount    bool                     `json:"requires_count"`
+}
+
 // SearchAPIResponse represents the API search response
 type SearchAPIResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
 		QueryID string `json:"query_id"`
 		Results struct {
-			Query       string                   `json:"query"`
-			Results     []SearchAPIResultItem    `json:"results"`
-			TotalCount  int                      `json:"total_count"`
-			SearchTime  int64                    `json:"search_time"`
-			Cached      bool                     `json:"cached"`
+			Query         string         `json:"query"`
+			EnhancedQuery *EnhancedQuery `json:"enhanced_query,omitempty"`
+			Results       []SearchAPIResultItem    `json:"results"`
+			TotalCount    int                      `json:"total_count"`
+			SearchTime    int64                    `json:"search_time"`
+			Cached        bool                     `json:"cached"`
+			UsedLLM       bool                     `json:"used_llm"`
 		} `json:"results"`
 	} `json:"data"`
 }
@@ -162,16 +175,122 @@ func (c *APIClient) Search(request SearchRequest) ([]SearchResult, error) {
 	return results, nil
 }
 
+// SearchWithDetails performs a search and returns enhanced query information
+func (c *APIClient) SearchWithDetails(request SearchRequest) (SearchResponseWithDetails, error) {
+	log.Printf("APIClient.SearchWithDetails called with request: %+v", request)
+	
+	// Use request limit/offset or defaults
+	limit := request.Limit
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+	
+	apiReq := SearchAPIRequest{
+		Query:   request.Query,
+		Filters: make(map[string]interface{}), // Empty filters
+		Limit:   limit,
+		Offset:  request.Offset,
+	}
+
+	body, err := json.Marshal(apiReq)
+	if err != nil {
+		return SearchResponseWithDetails{}, fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	resp, err := c.httpClient.Post(
+		c.baseURL+"/api/v1/search",
+		"application/json",
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return SearchResponseWithDetails{}, fmt.Errorf("API request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return SearchResponseWithDetails{}, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Read the response body first for logging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return SearchResponseWithDetails{}, fmt.Errorf("failed to read response body: %v", err)
+	}
+	
+	log.Printf("DEBUG: Raw API response: %s", string(bodyBytes))
+	
+	var apiResp SearchAPIResponse
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		return SearchResponseWithDetails{}, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	if !apiResp.Success {
+		return SearchResponseWithDetails{}, fmt.Errorf("search API returned error response")
+	}
+
+	// Convert API result items to our SearchResult format
+	log.Printf("Converting %d API results to SearchResult format", len(apiResp.Data.Results.Results))
+	results := make([]SearchResult, len(apiResp.Data.Results.Results))
+	for i, apiItem := range apiResp.Data.Results.Results {
+		log.Printf("Converting result %d: %+v", i, apiItem)
+		
+		// Sanitize content to prevent XSS
+		sanitizedContent := strings.ReplaceAll(apiItem.Content, "<script>", "&lt;script&gt;")
+		sanitizedContent = strings.ReplaceAll(sanitizedContent, "</script>", "&lt;/script&gt;")
+		if len(sanitizedContent) > 500 {
+			sanitizedContent = sanitizedContent[:500] + "..."
+		}
+		
+		// Sanitize highlights
+		sanitizedHighlights := make([]string, len(apiItem.Highlights))
+		for j, highlight := range apiItem.Highlights {
+			sanitizedHighlights[j] = strings.ReplaceAll(highlight, "<script>", "&lt;script&gt;")
+			sanitizedHighlights[j] = strings.ReplaceAll(sanitizedHighlights[j], "</script>", "&lt;/script&gt;")
+			if len(sanitizedHighlights[j]) > 200 {
+				sanitizedHighlights[j] = sanitizedHighlights[j][:200] + "..."
+			}
+		}
+		
+		results[i] = SearchResult{
+			ID:           fmt.Sprintf("%d", apiItem.ChunkID),
+			Path:         apiItem.FilePath,
+			Name:         apiItem.Filename,
+			Type:         apiItem.FileType,
+			Size:         0, // Size not provided in chunk response
+			ModifiedAt:   time.Now().Format(time.RFC3339), // ModifiedAt not in chunk response
+			Score:        apiItem.Score,
+			Highlights:   sanitizedHighlights,
+			Snippet:      sanitizedContent,
+			TotalResults: apiResp.Data.Results.TotalCount,
+		}
+	}
+
+	// Create detailed response with enhanced query information
+	response := SearchResponseWithDetails{
+		Results:       results,
+		EnhancedQuery: apiResp.Data.Results.EnhancedQuery,
+		UsedLLM:       apiResp.Data.Results.UsedLLM,
+		SearchTime:    apiResp.Data.Results.SearchTime,
+		TotalCount:    apiResp.Data.Results.TotalCount,
+	}
+
+	log.Printf("DEBUG: Enhanced query from API: %+v", apiResp.Data.Results.EnhancedQuery)
+	if apiResp.Data.Results.EnhancedQuery != nil {
+		log.Printf("DEBUG: Search terms from API: %+v", apiResp.Data.Results.EnhancedQuery.SearchTerms)
+	}
+	log.Printf("Final SearchWithDetails response created")
+	return response, nil
+}
+
 // StartIndexing starts the indexing process via the API
 func (c *APIClient) StartIndexing(path string) error {
 	// Convert single path to paths array and set recursive=true
 	paths := []string{}
 	if path != "" {
 		paths = []string{path}
-	} else {
-		// Default to user's home directory if no path provided
-		paths = []string{"/Users"}
 	}
+	// If no path provided, send empty array to let backend use configured WATCH_PATHS
 	
 	body, _ := json.Marshal(map[string]interface{}{
 		"paths":     paths,
@@ -394,6 +513,7 @@ func (c *APIClient) GetSystemStatus() (SystemStatus, error) {
 		Database: map[string]interface{}{
 			"connected": true, // If we got a response, database is connected
 			"size":      int64(getFloat(data, "database_size")),
+			"size_info": getMap(data, "database_size_info"),
 		},
 		Embeddings: map[string]interface{}{
 			"available": true, // If we got a successful status response, embeddings are available
@@ -424,13 +544,16 @@ func (c *APIClient) GetSystemStatus() (SystemStatus, error) {
 func (c *APIClient) GetConfig() (string, error) {
 	resp, err := c.httpClient.Get(c.baseURL + "/api/v1/config")
 	if err != nil {
-		// Return default config if API is not available
+		// Return default config if API is not available - using database config field names
 		return `{
-			"DatabaseURL": "postgresql://localhost/filesearch",
-			"OllamaURL": "http://localhost:11434",
-			"EmbeddingModel": "nomic-embed-text",
-			"IndexPaths": [],
-			"ExcludePatterns": ["*.tmp", "node_modules/*", ".git/*"]
+			"success": true,
+			"data": {
+				"database_url": "postgresql://localhost/filesearch",
+				"ollama_host": "http://localhost:11434",
+				"embedding_model": "nomic-embed-text",
+				"watch_paths": ["/Users/asmith/Documents", "/Users/asmith/Downloads"],
+				"ignore_patterns": [".*", "~*", "*.tmp", "__pycache__", "node_modules", ".git", "*.log"]
+			}
 		}`, nil
 	}
 	defer resp.Body.Close()
@@ -484,12 +607,36 @@ func (c *APIClient) GetFiles(limit, offset int) ([]map[string]interface{}, error
 		return []map[string]interface{}{}, nil
 	}
 
-	var files []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&files); err != nil {
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return []map[string]interface{}{}, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	return files, nil
+	// Check if the response is successful
+	if success, ok := response["success"].(bool); !ok || !success {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Extract files from data field
+	data, ok := response["data"].(map[string]interface{})
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+
+	files, ok := data["files"].([]interface{})
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Convert to []map[string]interface{}
+	result := make([]map[string]interface{}, len(files))
+	for i, file := range files {
+		if fileMap, ok := file.(map[string]interface{}); ok {
+			result[i] = fileMap
+		}
+	}
+
+	return result, nil
 }
 
 // ResetDatabase resets the database via the API
@@ -564,4 +711,41 @@ func getIndexingState(data map[string]interface{}) string {
 		return "running"
 	}
 	return "idle"
+}
+
+// CallAPI makes a generic HTTP request to the backend API
+func (c *APIClient) CallAPI(method, endpoint, body string) (string, error) {
+	url := c.baseURL + endpoint
+	log.Printf("Making %s request to: %s", method, url)
+
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+
+	req, err := http.NewRequest(method, url, reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(responseBody))
+	}
+
+	return string(responseBody), nil
 }

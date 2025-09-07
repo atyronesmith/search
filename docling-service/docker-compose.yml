@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  docling-service:
+    build: .
+    ports:
+      - "8082:8082"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8082
+    volumes:
+      # Optional: Mount local directories for file access
+      - /tmp:/tmp:ro
+      - /Users/asmith/Downloads:/downloads:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

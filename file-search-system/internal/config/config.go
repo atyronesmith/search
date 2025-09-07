@@ -55,6 +55,12 @@ type Config struct {
 	LogLevel string
 	LogFile  string
 
+	// Docling Service
+	DoclingEnabled     bool
+	DoclingServiceURL  string
+	DoclingTimeout     time.Duration
+	DoclingFallback    bool
+
 	// Service
 	ServiceName      string
 	ServiceAutoStart bool
@@ -114,6 +120,12 @@ func Load(path string) (*Config, error) {
 		// Logging defaults
 		LogLevel: getEnv("LOG_LEVEL", "INFO"),
 		LogFile:  getEnv("LOG_FILE", ""),
+
+		// Docling service defaults
+		DoclingEnabled:    getEnvBool("DOCLING_ENABLED", true),
+		DoclingServiceURL: getEnv("DOCLING_SERVICE_URL", "http://localhost:8082"),
+		DoclingTimeout:    getEnvDuration("DOCLING_TIMEOUT", "300s"),
+		DoclingFallback:   getEnvBool("DOCLING_FALLBACK", true),
 
 		// Service defaults
 		ServiceName:      getEnv("SERVICE_NAME", "FileSearchService"),

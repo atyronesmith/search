@@ -10,10 +10,13 @@ function SettingsPage() {
   const [databaseStats, setDatabaseStats] = useState<any>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
 
   useEffect(() => {
     loadConfig()
     loadDatabaseStats()
+    loadOllamaModels()
     
     // Set up periodic updates for database stats (every 5 seconds)
     const interval = setInterval(() => {
@@ -27,9 +30,13 @@ function SettingsPage() {
     try {
       setLoading(true)
       const configStr = await window.go.main.App.GetConfig()
-      const configObj = JSON.parse(configStr)
+      const response = JSON.parse(configStr)
+      
+      // Extract data from API response format {success: true, data: {...}}
+      const configObj = response.success && response.data ? response.data : response
+      
       setConfig(configObj)
-      setOriginalConfig(JSON.parse(configStr)) // Store a separate copy
+      setOriginalConfig(configObj) // Store a separate copy
       setHasChanges(false)
     } catch (error) {
       console.error('Failed to load config:', error)
@@ -57,6 +64,24 @@ function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load database stats:', error)
+    }
+  }
+
+  const loadOllamaModels = async () => {
+    try {
+      setLoadingModels(true)
+      // Call the backend API to get available models
+      const response = await window.go.main.App.CallAPI('GET', '/api/v1/ollama/models', '')
+      const data = JSON.parse(response)
+      if (data.success && data.data.models) {
+        setAvailableModels(data.data.models)
+      }
+    } catch (error) {
+      console.error('Failed to load Ollama models:', error)
+      // Set fallback models if API call fails
+      setAvailableModels(['nomic-embed-text', 'mxbai-embed-large', 'all-minilm'])
+    } finally {
+      setLoadingModels(false)
     }
   }
 
@@ -210,16 +235,25 @@ function SettingsPage() {
               />
             </div>
             <div className="form-group">
-              <label>Embedding Model</label>
+              <label>
+                Embedding Model 
+                {loadingModels && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>Loading models...</span>}
+              </label>
               <select
                 value={config.EmbeddingModel || ''}
                 onChange={(e) => updateConfig('EmbeddingModel', e.target.value)}
+                disabled={loadingModels}
               >
                 <option value="">Select a model</option>
-                <option value="nomic-embed-text">nomic-embed-text</option>
-                <option value="mxbai-embed-large">mxbai-embed-large</option>
-                <option value="all-minilm">all-minilm</option>
+                {availableModels.map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
               </select>
+              {availableModels.length === 0 && !loadingModels && (
+                <p style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                  No models found. Make sure Ollama is running.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -288,31 +322,59 @@ function SettingsPage() {
           </div>
         </div>
 
-        {/* Indexing Paths - Full Width */}
+        {/* Indexing Configuration - Full Width */}
         <div className="settings-card full-width">
           <div className="card-header">
             <h3>📂 Indexing Configuration</h3>
-            <p>Directories to index and patterns to exclude</p>
+            <p>Configure which directories to index and which files to ignore</p>
           </div>
           <div className="card-content">
+
+
             <div className="form-row">
               <div className="form-group">
-                <label>Index Paths (comma-separated)</label>
+                <label style={{ fontWeight: 'bold', fontSize: '16px' }}>📁 Watch Directories</label>
                 <textarea
-                  value={config.IndexPaths?.join(', ') || ''}
-                  onChange={(e) => updateConfig('IndexPaths', e.target.value.split(',').map((s: string) => s.trim()))}
-                  placeholder="/path/to/directory1, /path/to/directory2"
-                  rows={3}
+                  value={config.watch_paths?.join('\n') || ''}
+                  onChange={(e) => updateConfig('watch_paths', e.target.value.split('\n').map((s: string) => s.trim()).filter(s => s.length > 0))}
+                  placeholder="/Users/asmith/Documents&#10;/Users/asmith/Downloads"
+                  rows={4}
+                  style={{ 
+                    fontFamily: 'monospace', 
+                    fontSize: '14px',
+                    backgroundColor: '#f8f9fa',
+                    border: '2px solid #dee2e6',
+                    borderRadius: '6px',
+                    padding: '12px'
+                  }}
                 />
+                <div style={{ fontSize: '13px', color: '#495057', marginTop: '8px', backgroundColor: '#e9ecef', padding: '8px', borderRadius: '4px' }}>
+                  <strong>Tips:</strong> Enter one directory per line. Use full paths like <code>/Users/asmith/Documents</code>. 
+                  Avoid system directories like <code>/usr/</code>, <code>/Applications/</code>, or development folders.
+                </div>
               </div>
+            </div>
+            
+            <div className="form-row" style={{ marginTop: '20px' }}>
               <div className="form-group">
-                <label>Exclude Patterns (comma-separated)</label>
+                <label style={{ fontWeight: 'bold', fontSize: '16px' }}>🚫 Ignore Patterns</label>
                 <textarea
-                  value={config.ExcludePatterns?.join(', ') || ''}
-                  onChange={(e) => updateConfig('ExcludePatterns', e.target.value.split(',').map((s: string) => s.trim()))}
-                  placeholder="*.tmp, node_modules/*, .git/*"
+                  value={config.ignore_patterns?.join('\n') || ''}
+                  onChange={(e) => updateConfig('ignore_patterns', e.target.value.split('\n').map((s: string) => s.trim()).filter(s => s.length > 0))}
+                  placeholder="*.tmp&#10;node_modules/**&#10;.git/**&#10;*.log"
                   rows={3}
+                  style={{ 
+                    fontFamily: 'monospace', 
+                    fontSize: '14px',
+                    backgroundColor: '#f8f9fa',
+                    border: '2px solid #dee2e6',
+                    borderRadius: '6px',
+                    padding: '12px'
+                  }}
                 />
+                <div style={{ fontSize: '13px', color: '#495057', marginTop: '8px', backgroundColor: '#e9ecef', padding: '8px', borderRadius: '4px' }}>
+                  <strong>File patterns to skip:</strong> Use wildcards like <code>*.tmp</code> or <code>node_modules/**</code> to exclude files and folders.
+                </div>
               </div>
             </div>
           </div>

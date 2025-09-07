@@ -21,6 +21,11 @@ DB_PASSWORD = postgres
 DB_HOST = localhost
 DB_PORT = 5432
 
+# Docling service configuration
+DOCLING_HOST = localhost
+DOCLING_PORT = 8082
+DOCLING_SERVICE_DIR = ../docling-service
+
 # Colors for output
 RED = \033[0;31m
 GREEN = \033[0;32m
@@ -33,7 +38,7 @@ NC = \033[0m # No Color
 # Default target
 .DEFAULT_GOAL := help
 
-.PHONY: help status install build clean start stop restart logs test lint format container-up container-down frontend-dev frontend-build electron-dev electron-build package deps-go deps-frontend deps setup dev prod
+.PHONY: help status install build clean start stop restart logs test lint format container-up container-down frontend-dev frontend-build electron-dev electron-build package deps-go deps-frontend deps setup dev prod docling-up docling-down docling-status docling-logs run-all stop-all
 
 ## Help
 help: ## Show this help message
@@ -42,10 +47,11 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "$(YELLOW)Quick Start:$(NC)"
-	@echo "  make setup    - Install all dependencies and setup database"
-	@echo "  make dev      - Start development environment"
-	@echo "  make build    - Build both backend and frontend"
-	@echo "  make package  - Create distributable packages"
+	@echo "  make setup      - Install all dependencies and setup database + docling"
+	@echo "  make run-all    - Start all services (database + docling)"
+	@echo "  make dev        - Start development environment"
+	@echo "  make status     - Check status of all services"
+	@echo "  make stop-all   - Stop all services"
 
 ## Status and Information
 status: ## Show system status
@@ -85,6 +91,18 @@ status: ## Show system status
 		echo "$(RED)$(CONTAINER_RUNTIME) not installed$(NC)"; \
 	fi
 	@echo ""
+	@echo "$(BLUE)Docling Service Status:$(NC)"
+	@if curl -s http://$(DOCLING_HOST):$(DOCLING_PORT)/health >/dev/null 2>&1; then \
+		echo "$(GREEN)Docling service is running on $(DOCLING_HOST):$(DOCLING_PORT)$(NC)"; \
+	else \
+		echo "$(RED)Docling service is not running$(NC)"; \
+		if [ -d "$(DOCLING_SERVICE_DIR)" ]; then \
+			echo "  Service directory: $(DOCLING_SERVICE_DIR)"; \
+		else \
+			echo "  $(RED)Service directory not found: $(DOCLING_SERVICE_DIR)$(NC)"; \
+		fi; \
+	fi
+	@echo ""
 	@echo "$(BLUE)Build Artifacts:$(NC)"
 	@if [ -f "$(BUILD_DIR)/$(BINARY_NAME)" ]; then echo "$(GREEN)Backend binary exists$(NC)"; else echo "$(RED)Backend binary missing$(NC)"; fi
 	@if [ -d "$(FRONTEND_DIR)/build" ]; then echo "$(GREEN)Frontend build exists$(NC)"; else echo "$(RED)Frontend build missing$(NC)"; fi
@@ -106,7 +124,7 @@ deps-frontend: ## Install Node.js dependencies
 	@echo "$(GREEN)Node.js dependencies installed$(NC)"
 
 ## Setup
-setup: deps container-up db-setup ## Complete setup for development
+setup: deps container-up docling-up db-setup ## Complete setup for development
 	@echo "$(GREEN)Setup complete! Run 'make dev' to start development environment$(NC)"
 
 db-setup: ## Setup database schema
@@ -143,6 +161,7 @@ build-frontend: ## Build React frontend
 dev: ## Start development environment
 	@echo "$(BLUE)Starting development environment...$(NC)"
 	@$(MAKE) container-up
+	@$(MAKE) docling-up
 	@sleep 2
 	@echo "$(YELLOW)Starting backend in background...$(NC)"
 	@cd $(BACKEND_DIR) && go run $(BINARY_PATH) &
@@ -163,6 +182,7 @@ dev-frontend: ## Start only frontend development server
 prod: build ## Start production servers
 	@echo "$(BLUE)Starting production environment...$(NC)"
 	@$(MAKE) container-up
+	@$(MAKE) docling-up
 	@sleep 2
 	@echo "$(YELLOW)Starting backend server...$(NC)"
 	@$(BUILD_DIR)/$(BINARY_NAME) &
@@ -183,6 +203,7 @@ stop: ## Stop all services
 	@pkill -f "electron.*file-search" 2>/dev/null || true
 	@pkill -f "file-search-server" 2>/dev/null || true
 	@$(MAKE) container-down
+	@$(MAKE) docling-down
 	@echo "$(GREEN)All services stopped$(NC)"
 
 restart: stop start ## Restart all services
@@ -269,6 +290,57 @@ container-reset: ## Reset database (WARNING: destroys data)
 	@$(COMPOSE_CMD) up -d
 	@sleep 3
 	@$(MAKE) db-setup
+
+## Docling Service Management
+docling-up: ## Start Docling service
+	@echo "$(BLUE)Starting Docling service...$(NC)"
+	@if [ -d "$(DOCLING_SERVICE_DIR)" ]; then \
+		cd $(DOCLING_SERVICE_DIR) && $(COMPOSE_CMD) up -d; \
+		echo "$(GREEN)Docling service started$(NC)"; \
+		echo "$(YELLOW)Waiting for service to be ready...$(NC)"; \
+		for i in 1 2 3 4 5 6; do \
+			sleep 5; \
+			if curl -s http://$(DOCLING_HOST):$(DOCLING_PORT)/health >/dev/null 2>&1; then \
+				echo "$(GREEN)Docling service is ready!$(NC)"; \
+				break; \
+			fi; \
+			echo "$(YELLOW)Still waiting... (attempt $$i/6)$(NC)"; \
+		done; \
+	else \
+		echo "$(RED)Docling service directory not found: $(DOCLING_SERVICE_DIR)$(NC)"; \
+		exit 1; \
+	fi
+
+docling-down: ## Stop Docling service
+	@echo "$(BLUE)Stopping Docling service...$(NC)"
+	@if [ -d "$(DOCLING_SERVICE_DIR)" ]; then \
+		cd $(DOCLING_SERVICE_DIR) && $(COMPOSE_CMD) down; \
+		echo "$(GREEN)Docling service stopped$(NC)"; \
+	else \
+		echo "$(YELLOW)Docling service directory not found: $(DOCLING_SERVICE_DIR)$(NC)"; \
+	fi
+
+docling-restart: docling-down docling-up ## Restart Docling service
+
+docling-status: ## Check Docling service status
+	@echo "$(BLUE)Checking Docling service status...$(NC)"
+	@if curl -s http://$(DOCLING_HOST):$(DOCLING_PORT)/health >/dev/null 2>&1; then \
+		echo "$(GREEN)✓ Docling service is running$(NC)"; \
+		curl -s http://$(DOCLING_HOST):$(DOCLING_PORT)/ | python3 -m json.tool 2>/dev/null || echo "Service info unavailable"; \
+	else \
+		echo "$(RED)✗ Docling service is not running$(NC)"; \
+	fi
+	@if [ -d "$(DOCLING_SERVICE_DIR)" ]; then \
+		echo "$(BLUE)Container status:$(NC)"; \
+		cd $(DOCLING_SERVICE_DIR) && $(COMPOSE_CMD) ps 2>/dev/null || echo "No containers found"; \
+	fi
+
+docling-logs: ## Show Docling service logs
+	@if [ -d "$(DOCLING_SERVICE_DIR)" ]; then \
+		cd $(DOCLING_SERVICE_DIR) && $(COMPOSE_CMD) logs -f; \
+	else \
+		echo "$(RED)Docling service directory not found: $(DOCLING_SERVICE_DIR)$(NC)"; \
+	fi
 
 # Aliases for backward compatibility
 docker-up: container-up
@@ -360,3 +432,20 @@ env: ## Show environment variables
 	@echo "DB_PORT=$(DB_PORT)"
 	@echo "CONTAINER_RUNTIME=$(CONTAINER_RUNTIME)"
 	@echo "COMPOSE_CMD=$(COMPOSE_CMD)"
+	@echo "DOCLING_HOST=$(DOCLING_HOST)"
+	@echo "DOCLING_PORT=$(DOCLING_PORT)"
+	@echo "DOCLING_SERVICE_DIR=$(DOCLING_SERVICE_DIR)"
+
+## Convenience Commands
+run-all: ## Start all services (database + docling + backend)
+	@echo "$(BLUE)Starting all services...$(NC)"
+	@$(MAKE) container-up
+	@$(MAKE) docling-up
+	@sleep 3
+	@echo "$(YELLOW)Services started. Backend can be started with 'make dev-backend'$(NC)"
+	@$(MAKE) status
+
+stop-all: ## Stop all services
+	@echo "$(BLUE)Stopping all services...$(NC)"
+	@$(MAKE) stop
+	@echo "$(GREEN)All services stopped$(NC)"

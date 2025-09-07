@@ -1,0 +1,24 @@
+{"error":"process does not exist","level":"warning","msg":"Could not get current process for monitoring","time":"2025-09-06T21:52:25-04:00"}
+{"level":"info","msg":"Starting background service","time":"2025-09-06T21:52:26-04:00"}
+{"level":"info","msg":"Starting indexing loop with parallel workers","time":"2025-09-06T21:52:26-04:00","workers":4}
+{"level":"info","msg":"Starting resource monitor","time":"2025-09-06T21:52:26-04:00"}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T21:52:26-04:00","worker_id":1}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T21:52:26-04:00","worker_id":0}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T21:52:26-04:00","worker_id":2}
+{"level":"info","msg":"Starting indexing worker","time":"2025-09-06T21:52:26-04:00","worker_id":3}
+{"level":"info","msg":"Starting event processor","time":"2025-09-06T21:52:26-04:00"}
+{"level":"info","msg":"Starting stats updater","time":"2025-09-06T21:52:26-04:00"}
+{"ignore_patterns":[".*","~*","*.tmp","__pycache__","node_modules",".git","*.log","*.photoslibrary/**","**/Spotlight/**","**/Caches/**","**/Cache/**"],"level":"info","msg":"Updated monitor configuration","time":"2025-09-06T21:52:26-04:00","watch_paths":["/Users/asmith/dev/testsearch"]}
+{"level":"info","msg":"File monitoring started with database configuration","paths":["/Users/asmith/dev/testsearch"],"time":"2025-09-06T21:52:26-04:00"}
+{"level":"info","msg":"Background service started successfully","time":"2025-09-06T21:52:26-04:00"}
+{"level":"info","msg":"Starting file changes processor","time":"2025-09-06T21:52:26-04:00"}
+{"event_type":"service_started","level":"info","message":"Background service started successfully","msg":"System event","time":"2025-09-06T21:52:26-04:00"}
+{"address":"127.0.0.1:8080","level":"info","msg":"Starting API server","time":"2025-09-06T21:52:26-04:00"}
+{"address":"127.0.0.1:8080","level":"info","msg":"Starting API server","time":"2025-09-06T21:52:26-04:00"}
+{"error":"listen tcp 127.0.0.1:8080: bind: address already in use","level":"error","msg":"API server stopped","time":"2025-09-06T21:52:26-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/Users/asmith/dev/testsearch/solar.pdf","time":"2025-09-06T22:32:18-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/Users/asmith/dev/testsearch/Doc2.docx","time":"2025-09-06T22:32:18-04:00"}
+{"level":"info","msg":"Added new file for indexing","path":"/Users/asmith/dev/testsearch/testdata/literature/mystery_noir.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Marked modified file for re-indexing","path":"/Users/asmith/dev/testsearch/testdata/literature/mystery_noir.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Added new file for indexing","path":"/Users/asmith/dev/testsearch/testdata/README.md","time":"2025-09-06T22:33:00-04:00"}
+{"level":"info","msg":"Added new file for indexing","path":"/Users/asmith/dev/testsearch/testdata/personal_info.txt","time":"2025-09-06T22:33:00-04:00"}

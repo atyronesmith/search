@@ -165,8 +165,8 @@ type Config struct {
     // ... existing fields
     
     // Docling service configuration
-    DoclingEnabled      bool   `env:"DOCLING_ENABLED" envDefault:"false"`
-    DoclingServiceURL   string `env:"DOCLING_SERVICE_URL" envDefault:"http://localhost:8081"`
+    DoclingEnabled      bool   `env:"DOCLING_ENABLED" envDefault:"true"`
+    DoclingServiceURL   string `env:"DOCLING_SERVICE_URL" envDefault:"http://localhost:8082"`
     DoclingTimeout      int    `env:"DOCLING_TIMEOUT" envDefault:"300"`
     DoclingFallback     bool   `env:"DOCLING_FALLBACK" envDefault:"true"`
 }
