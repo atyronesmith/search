@@ -112,7 +112,7 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 		"file":     filePath,
 		"duration": duration,
 		"size":     len(response.Content),
-		"has_api_metadata": response.Metadata != nil && len(response.Metadata) > 0,
+		"has_api_metadata": len(response.Metadata) > 0,
 		"api_metadata_count": len(response.Metadata),
 	}).Debug("Extraction completed")
 
@@ -148,7 +148,7 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 
 	e.log.WithFields(logrus.Fields{
 		"file": filePath,
-		"has_final_metadata": finalMetadata != nil && len(finalMetadata) > 0,
+		"has_final_metadata": len(finalMetadata) > 0,
 		"final_metadata_count": len(finalMetadata),
 		"has_royal": royalMetadata != nil,
 	}).Debug("Returning extracted content with metadata")
@@ -245,11 +245,19 @@ func (e *UnstructuredExtractor) extractViaAPI(ctx context.Context, filePath stri
 	}
 
 	// Add parameters for maximum metadata extraction
-	writer.WriteField("strategy", "hi_res") // High resolution for maximum detail
-	writer.WriteField("include_metadata", "true")
+	if err := writer.WriteField("strategy", "hi_res"); err != nil { // High resolution for maximum detail
+		return nil, fmt.Errorf("failed to write strategy field: %v", err)
+	}
+	if err := writer.WriteField("include_metadata", "true"); err != nil {
+		return nil, fmt.Errorf("failed to write include_metadata field: %v", err)
+	}
 	// coordinates parameter removed - causes conflicts with internal implementation
-	writer.WriteField("extract_images", "false") // Disabled to avoid errors
-	writer.WriteField("infer_table_structure", "true")
+	if err := writer.WriteField("extract_images", "false"); err != nil { // Disabled to avoid errors
+		return nil, fmt.Errorf("failed to write extract_images field: %v", err)
+	}
+	if err := writer.WriteField("infer_table_structure", "true"); err != nil {
+		return nil, fmt.Errorf("failed to write infer_table_structure field: %v", err)
+	}
 
 	if err := writer.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close multipart writer: %v", err)

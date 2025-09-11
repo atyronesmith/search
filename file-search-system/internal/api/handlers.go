@@ -166,12 +166,12 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	if req.Limit <= 0 {
 		req.Limit = 50
 	}
-	
+
 	// Default sort by filename if not specified
 	if req.SortBy == "" {
 		req.SortBy = "filename"
 	}
-	
+
 	// Default sort direction to ascending if not specified
 	if req.SortDir == "" {
 		req.SortDir = "asc"
@@ -494,7 +494,7 @@ func (s *Server) handleDatabaseReset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleClearCache(w http.ResponseWriter, r *http.Request) {
 	s.searchEngine.ClearCache()
-	
+
 	// Also clear LLM enhancer cache if available
 	if s.searchEngine.GetLLMEnhancer() != nil {
 		s.searchEngine.GetLLMEnhancer().ClearCache()
@@ -511,15 +511,15 @@ func (s *Server) handleQueryPerformanceStats(w http.ResponseWriter, r *http.Requ
 		s.sendError(w, http.StatusServiceUnavailable, "LLM enhancer not available")
 		return
 	}
-	
+
 	llmEnhancer := s.searchEngine.GetLLMEnhancer()
-	
+
 	// Get performance metrics
 	perfMetrics := llmEnhancer.GetPerformanceMetrics()
-	
+
 	// Get cache statistics
 	cacheHits, cacheMisses, cacheHitRate := llmEnhancer.GetCacheStats()
-	
+
 	// Combine all statistics
 	stats := map[string]interface{}{
 		"performance": perfMetrics,
@@ -529,10 +529,10 @@ func (s *Server) handleQueryPerformanceStats(w http.ResponseWriter, r *http.Requ
 			"hit_rate": cacheHitRate,
 		},
 	}
-	
+
 	// Log the stats for debugging
 	llmEnhancer.LogPerformanceStats()
-	
+
 	s.sendSuccess(w, stats)
 }
 
@@ -573,7 +573,10 @@ func (s *Server) handleWSClient(conn *websocket.Conn) {
 	}()
 
 	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		s.log.WithError(err).Error("Failed to set WebSocket read deadline")
+		return
+	}
 
 	// Read messages (mostly for ping/pong)
 	for {
@@ -587,11 +590,17 @@ func (s *Server) handleWSClient(conn *websocket.Conn) {
 
 		// Handle ping/pong
 		if messageType == websocket.PingMessage {
-			conn.WriteMessage(websocket.PongMessage, message)
+			if err := conn.WriteMessage(websocket.PongMessage, message); err != nil {
+				s.log.WithError(err).Error("Failed to write PongMessage to WebSocket")
+				break
+			}
 		}
 
 		// Reset read deadline
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if err := conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+			s.log.WithError(err).Error("Failed to reset WebSocket read deadline")
+			break
+		}
 	}
 }
 

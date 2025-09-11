@@ -18,8 +18,6 @@ require (
 	golang.org/x/time v0.5.0
 )
 
-require gopkg.in/ini.v1 v1.67.0 // indirect
-
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/djherbis/times v1.6.0

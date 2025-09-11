@@ -35,7 +35,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 // Logging middleware
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+//		start := time.Now()
 
 		// Wrap ResponseWriter to capture status code
 		wrapped := &responseWriter{
@@ -45,18 +45,18 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(wrapped, r)
 
-		duration := time.Since(start)
+		// duration := time.Since(start)
 
-		// Log request
-		s.log.WithFields(logrus.Fields{
-			"method":      r.Method,
-			"url":         r.URL.Path,
-			"status":      wrapped.statusCode,
-			"duration":    duration,
-			"remote_addr": r.RemoteAddr,
-			"user_agent":  r.UserAgent(),
-			"size":        wrapped.size,
-		}).Info("HTTP request")
+		// // Log request
+		// s.log.WithFields(logrus.Fields{
+		// 	"method":      r.Method,
+		// 	"url":         r.URL.Path,
+		// 	"status":      wrapped.statusCode,
+		// 	"duration":    duration,
+		// 	"remote_addr": r.RemoteAddr,
+		// 	"user_agent":  r.UserAgent(),
+		// 	"size":        wrapped.size,
+		// }).Info("HTTP request")
 	})
 }
 
