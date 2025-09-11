@@ -1,0 +1,65 @@
+# Binary files
+file-search-system/server
+file-search-desktop/build/bin/*
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go binaries
+/bin/
+/build/
+file-search-system/file-search-system
+file-search-desktop/file-search-desktop
+
+# Wails build outputs
+file-search-desktop/build/
+file-search-desktop/dist/
+
+# Test binaries
+*_test
+*.test.exe
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*$py.class
+
+# Node modules and dist
+node_modules/
+dist/
+web/frontend/node_modules/
+web/frontend/dist/
+
+# Miniconda/Anaconda
+Miniconda*.sh
+Anaconda*.sh
+miniconda/
+anaconda/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+backend.log
+
+# OS files
+.DS_Store
+Thumbs.db
