@@ -128,7 +128,10 @@ func (c *DoclingClient) ExtractFromFile(ctx context.Context, filePath string, me
 
 	// Add extraction method parameter
 	if method != "" {
-		writer.WriteField("extraction_method", method)
+		err = writer.WriteField("extraction_method", method)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write extraction method field: %w", err)
+		}
 	}
 
 	writer.Close()
@@ -300,7 +303,7 @@ func getFileType(filePath string) string {
 	}
 }
 
-// Enhanced PDF Extractor with Docling integration
+// EnhancedPDFExtractor provides enhanced PDF extraction with Docling integration
 type EnhancedPDFExtractor struct {
 	*PDFExtractor
 	doclingClient *DoclingClient
@@ -308,7 +311,7 @@ type EnhancedPDFExtractor struct {
 }
 
 // NewEnhancedPDFExtractor creates a new enhanced PDF extractor with docling integration
-func NewEnhancedPDFExtractor(config *ExtractorConfig, doclingConfig *DoclingConfig) *EnhancedPDFExtractor {
+func NewEnhancedPDFExtractor(config *Config, doclingConfig *DoclingConfig) *EnhancedPDFExtractor {
 	return &EnhancedPDFExtractor{
 		PDFExtractor:    NewPDFExtractor(config),
 		doclingClient:   NewDoclingClient(doclingConfig),
@@ -339,7 +342,7 @@ func (e *EnhancedPDFExtractor) Extract(ctx context.Context, filePath string) (*E
 			content.Metadata["primary_extractor"] = "docling"
 			return content, nil
 		}
-		
+
 		// Log docling failure but continue with fallback
 		if err != nil {
 			fmt.Printf("Docling extraction failed: %v\n", err)
@@ -372,17 +375,17 @@ func (e *EnhancedPDFExtractor) GetSupportedExtensions() []string {
 
 // DoclingExtractor handles all file types supported by Docling service
 type DoclingExtractor struct {
-	config        *ExtractorConfig
+	config        *Config
 	doclingClient *DoclingClient
 	fallbackEnabled bool
 }
 
 // NewDoclingExtractor creates a new comprehensive Docling extractor
-func NewDoclingExtractor(config *ExtractorConfig, doclingConfig *DoclingConfig) *DoclingExtractor {
+func NewDoclingExtractor(config *Config, doclingConfig *DoclingConfig) *DoclingExtractor {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
+
 	return &DoclingExtractor{
 		config:        config,
 		doclingClient: NewDoclingClient(doclingConfig),
@@ -393,7 +396,7 @@ func NewDoclingExtractor(config *ExtractorConfig, doclingConfig *DoclingConfig) 
 // CanExtract returns true if this extractor can handle the file type
 func (e *DoclingExtractor) CanExtract(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	supportedExts := map[string]bool{
 		".pdf":  true, // PDF documents
 		".docx": true, // Microsoft Word documents
@@ -406,7 +409,7 @@ func (e *DoclingExtractor) CanExtract(filePath string) bool {
 		".md":   true, // Markdown files
 		".adoc": true, // AsciiDoc documents
 	}
-	
+
 	return supportedExts[ext]
 }
 
@@ -425,7 +428,7 @@ func (e *DoclingExtractor) Extract(ctx context.Context, filePath string) (*Extra
 	}
 
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	// Try Docling service first for all supported formats
 	if e.doclingClient.IsAvailable(ctx) {
 		result, err := e.doclingClient.ExtractFromFile(ctx, filePath, "auto")
@@ -436,7 +439,7 @@ func (e *DoclingExtractor) Extract(ctx context.Context, filePath string) (*Extra
 			content.Metadata["file_type"] = e.getFileTypeDescription(ext)
 			return content, nil
 		}
-		
+
 		// Log docling failure but continue with fallback for certain types
 		if err != nil {
 			fmt.Printf("Docling extraction failed for %s: %v\n", filePath, err)
@@ -486,7 +489,7 @@ func (e *DoclingExtractor) extractAsText(filePath string) (*ExtractedContent, er
 	}
 
 	text := string(content)
-	
+
 	// Basic validation
 	if !utf8.ValidString(text) {
 		return nil, fmt.Errorf("file contains invalid UTF-8")

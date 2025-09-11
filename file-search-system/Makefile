@@ -26,6 +26,11 @@ DOCLING_HOST = localhost
 DOCLING_PORT = 8082
 DOCLING_SERVICE_DIR = ../docling-service
 
+# NLP service configuration
+NLP_SERVICE_HOST = localhost
+NLP_SERVICE_PORT = 8081
+NLP_SERVICE_DIR = nlp_service
+
 # Colors for output
 RED = \033[0;31m
 GREEN = \033[0;32m
@@ -206,6 +211,67 @@ stop: ## Stop all services
 	@$(MAKE) docling-down
 	@echo "$(GREEN)All services stopped$(NC)"
 
+stop-backend: ## Stop only the Go backend (keep database running)
+	@echo "$(BLUE)Stopping backend server...$(NC)"
+	@if [ -f .backend.pid ] && kill -0 `cat .backend.pid` 2>/dev/null; then \
+		kill `cat .backend.pid` 2>/dev/null || true; \
+		rm -f .backend.pid; \
+		echo "$(GREEN)Backend stopped$(NC)"; \
+	else \
+		echo "$(YELLOW)Backend not running via PID file$(NC)"; \
+	fi
+	@pkill -f "file-search-server" 2>/dev/null || true
+	@pkill -f "build/file-search-server" 2>/dev/null || true
+	@echo "$(GREEN)Backend stopped (database still running)$(NC)"
+
+restart-backend: ## Restart backend in development mode (stop if running, then start)
+	@echo "$(BLUE)Restarting backend in development mode...$(NC)"
+	@# First, try to stop any running backend processes
+	@if [ -f .backend.pid ] && kill -0 `cat .backend.pid` 2>/dev/null; then \
+		echo "$(YELLOW)Stopping existing backend process (PID: `cat .backend.pid`)...$(NC)"; \
+		kill `cat .backend.pid` 2>/dev/null || true; \
+		rm -f .backend.pid; \
+		sleep 1; \
+	fi
+	@# Also kill any other backend processes that might be running
+	@pkill -f "go run.*cmd/server" 2>/dev/null || true
+	@pkill -f "file-search-server" 2>/dev/null || true
+	@pkill -f "build/file-search-server" 2>/dev/null || true
+	@# Give processes time to terminate
+	@sleep 1
+	@# Now start the backend in development mode
+	@echo "$(GREEN)Starting backend in development mode...$(NC)"
+	@cd $(BACKEND_DIR) && go run $(BINARY_PATH)
+
+restart-backend-daemon: ## Restart backend in background/daemon mode (stop if running, then start in background)
+	@echo "$(BLUE)Restarting backend in daemon mode...$(NC)"
+	@# First, try to stop any running backend processes
+	@if [ -f .backend.pid ] && kill -0 `cat .backend.pid` 2>/dev/null; then \
+		echo "$(YELLOW)Stopping existing backend process (PID: `cat .backend.pid`)...$(NC)"; \
+		kill `cat .backend.pid` 2>/dev/null || true; \
+		rm -f .backend.pid; \
+		sleep 1; \
+	fi
+	@# Also kill any other backend processes that might be running
+	@pkill -f "go run.*cmd/server" 2>/dev/null || true
+	@pkill -f "file-search-server" 2>/dev/null || true
+	@pkill -f "build/file-search-server" 2>/dev/null || true
+	@# Give processes time to terminate
+	@sleep 1
+	@# Build and start the backend in background
+	@echo "$(YELLOW)Building backend...$(NC)"
+	@cd $(BACKEND_DIR) && go build -o $(BUILD_DIR)/$(BINARY_NAME) $(BINARY_PATH)
+	@echo "$(GREEN)Starting backend in daemon mode...$(NC)"
+	@cd $(BACKEND_DIR) && ( $(BUILD_DIR)/$(BINARY_NAME) > backend.log 2>&1 & echo $$! > .backend.pid )
+	@sleep 1
+	@if [ -f .backend.pid ] && kill -0 `cat .backend.pid` 2>/dev/null; then \
+		echo "$(GREEN)Backend started in background (PID: `cat .backend.pid`)$(NC)"; \
+		echo "$(CYAN)Logs: tail -f backend.log$(NC)"; \
+	else \
+		echo "$(RED)Failed to start backend$(NC)"; \
+		exit 1; \
+	fi
+
 restart: stop start ## Restart all services
 
 ## Logs
@@ -342,6 +408,144 @@ docling-logs: ## Show Docling service logs
 		echo "$(RED)Docling service directory not found: $(DOCLING_SERVICE_DIR)$(NC)"; \
 	fi
 
+## NLP Service Management
+nlp-up: ## Start NLP service
+	@echo "$(BLUE)Starting NLP service...$(NC)"
+	@if [ -d "$(NLP_SERVICE_DIR)" ]; then \
+		cd $(NLP_SERVICE_DIR) && $(COMPOSE_CMD) up -d; \
+		echo "$(GREEN)NLP service started$(NC)"; \
+		echo "$(YELLOW)Waiting for service to be ready...$(NC)"; \
+		for i in 1 2 3 4 5 6; do \
+			sleep 5; \
+			if curl -s http://$(NLP_SERVICE_HOST):$(NLP_SERVICE_PORT)/health >/dev/null 2>&1; then \
+				echo "$(GREEN)NLP service is ready!$(NC)"; \
+				break; \
+			fi; \
+			echo "$(YELLOW)Still waiting... (attempt $$i/6)$(NC)"; \
+		done; \
+	else \
+		echo "$(YELLOW)NLP service directory not found, creating it...$(NC)"; \
+		mkdir -p $(NLP_SERVICE_DIR); \
+		echo "$(GREEN)NLP service directory created. Run 'make nlp-setup' to install dependencies.$(NC)"; \
+	fi
+
+nlp-down: ## Stop NLP service
+	@echo "$(BLUE)Stopping NLP service...$(NC)"
+	@if [ -d "$(NLP_SERVICE_DIR)" ]; then \
+		cd $(NLP_SERVICE_DIR) && $(COMPOSE_CMD) down 2>/dev/null || true; \
+		echo "$(GREEN)NLP service stopped$(NC)"; \
+	else \
+		echo "$(YELLOW)NLP service directory not found$(NC)"; \
+	fi
+
+nlp-restart: nlp-down nlp-up ## Restart NLP service
+
+nlp-status: ## Check NLP service status
+	@echo "$(BLUE)Checking NLP service status...$(NC)"
+	@if curl -s http://$(NLP_SERVICE_HOST):$(NLP_SERVICE_PORT)/health >/dev/null 2>&1; then \
+		echo "$(GREEN)✓ NLP service is running$(NC)"; \
+		curl -s http://$(NLP_SERVICE_HOST):$(NLP_SERVICE_PORT)/health | python3 -m json.tool 2>/dev/null || echo "Service info unavailable"; \
+	else \
+		echo "$(RED)✗ NLP service is not running$(NC)"; \
+	fi
+	@if [ -d "$(NLP_SERVICE_DIR)" ]; then \
+		echo "$(BLUE)Container status:$(NC)"; \
+		cd $(NLP_SERVICE_DIR) && $(COMPOSE_CMD) ps 2>/dev/null || echo "No containers found"; \
+	fi
+
+nlp-logs: ## Show NLP service logs
+	@if [ -d "$(NLP_SERVICE_DIR)" ]; then \
+		cd $(NLP_SERVICE_DIR) && $(COMPOSE_CMD) logs -f; \
+	else \
+		echo "$(RED)NLP service directory not found$(NC)"; \
+	fi
+
+nlp-setup: ## Setup NLP service environment
+	@echo "$(BLUE)Setting up NLP service...$(NC)"
+	@if [ ! -d "$(NLP_SERVICE_DIR)" ]; then \
+		echo "$(RED)NLP service directory not found$(NC)"; \
+		exit 1; \
+	fi
+	@cd $(NLP_SERVICE_DIR) && \
+		if [ ! -d "venv" ]; then \
+			echo "$(BLUE)Creating Python virtual environment...$(NC)"; \
+			python3 -m venv venv; \
+		fi && \
+		echo "$(BLUE)Installing Python dependencies...$(NC)" && \
+		./venv/bin/pip install --upgrade pip && \
+		./venv/bin/pip install -r requirements.txt && \
+		echo "$(GREEN)NLP service setup complete$(NC)"
+
+nlp-dev: ## Run NLP service in development mode
+	@echo "$(BLUE)Starting NLP service in development mode...$(NC)"
+	@cd $(NLP_SERVICE_DIR) && \
+		if [ -d "venv" ]; then \
+			./venv/bin/python main.py; \
+		else \
+			echo "$(RED)Virtual environment not found. Run 'make nlp-setup' first$(NC)"; \
+			exit 1; \
+		fi
+
+nlp-build: ## Build NLP service Docker image
+	@echo "$(BLUE)Building NLP service Docker image...$(NC)"
+	@cd $(NLP_SERVICE_DIR) && \
+		$(CONTAINER_RUNTIME) build -t nlp-service:latest . && \
+		echo "$(GREEN)NLP service image built successfully$(NC)"
+
+## Unstructured Container Management (for DOCX/XLS support)
+unstructured-build: ## Build Unstructured container from scratch
+	@echo "$(BLUE)Building Unstructured container...$(NC)"
+	@$(CONTAINER_RUNTIME) build -f Dockerfile.unstructured-simple -t file-search-unstructured:lite .
+	@echo "$(GREEN)Unstructured container built successfully$(NC)"
+
+unstructured-up: unstructured-build ## Start Unstructured service
+	@echo "$(BLUE)Starting Unstructured service...$(NC)"
+	@$(CONTAINER_RUNTIME) stop file-search-unstructured 2>/dev/null || true
+	@$(CONTAINER_RUNTIME) rm file-search-unstructured 2>/dev/null || true
+	@$(CONTAINER_RUNTIME) run -d --name file-search-unstructured -p 8001:8001 file-search-unstructured:lite
+	@echo "$(GREEN)Unstructured service started on port 8001$(NC)"
+	@echo "$(YELLOW)Waiting for service to be ready...$(NC)"
+	@for i in 1 2 3 4 5; do \
+		sleep 2; \
+		if curl -s http://localhost:8001/health >/dev/null 2>&1; then \
+			echo "$(GREEN)Unstructured service is ready!$(NC)"; \
+			break; \
+		fi; \
+		echo "$(YELLOW)Still waiting... (attempt $$i/5)$(NC)"; \
+	done
+
+unstructured-down: ## Stop Unstructured service
+	@echo "$(BLUE)Stopping Unstructured service...$(NC)"
+	@$(CONTAINER_RUNTIME) stop file-search-unstructured 2>/dev/null || true
+	@$(CONTAINER_RUNTIME) rm file-search-unstructured 2>/dev/null || true
+	@echo "$(GREEN)Unstructured service stopped$(NC)"
+
+unstructured-status: ## Check Unstructured service status
+	@echo "$(BLUE)Unstructured Service Status$(NC)"
+	@if $(CONTAINER_RUNTIME) ps | grep -q file-search-unstructured; then \
+		echo "$(GREEN)Container is running$(NC)"; \
+		echo "$(BLUE)Health check:$(NC)"; \
+		curl -s http://localhost:8001/health | python3 -m json.tool 2>/dev/null || echo "$(RED)Service not responding$(NC)"; \
+	else \
+		echo "$(RED)Container is not running$(NC)"; \
+	fi
+
+unstructured-logs: ## Show Unstructured service logs
+	@$(CONTAINER_RUNTIME) logs -f file-search-unstructured 2>/dev/null || echo "$(RED)Container not found$(NC)"
+
+unstructured-restart: ## Restart Unstructured service
+	@echo "$(BLUE)Restarting Unstructured service...$(NC)"
+	@$(CONTAINER_RUNTIME) restart file-search-unstructured 2>/dev/null || echo "$(RED)Container not found$(NC)"
+	@echo "$(GREEN)Unstructured service restarted$(NC)"
+
+unstructured-monitor: ## Monitor Unstructured container for stuck processes
+	@echo "$(BLUE)Starting Unstructured container monitor...$(NC)"
+	@./scripts/monitor_unstructured.sh
+
+unstructured-cpu: ## Check Unstructured container CPU usage
+	@echo "$(BLUE)Unstructured Container CPU Usage$(NC)"
+	@$(CONTAINER_RUNTIME) stats --no-stream file-search-unstructured 2>/dev/null || echo "$(RED)Container not found$(NC)"
+
 # Aliases for backward compatibility
 docker-up: container-up
 docker-down: container-down
@@ -437,10 +641,11 @@ env: ## Show environment variables
 	@echo "DOCLING_SERVICE_DIR=$(DOCLING_SERVICE_DIR)"
 
 ## Convenience Commands
-run-all: ## Start all services (database + docling + backend)
+run-all: ## Start all services (database + docling + NLP + backend)
 	@echo "$(BLUE)Starting all services...$(NC)"
 	@$(MAKE) container-up
 	@$(MAKE) docling-up
+	@$(MAKE) nlp-up
 	@sleep 3
 	@echo "$(YELLOW)Services started. Backend can be started with 'make dev-backend'$(NC)"
 	@$(MAKE) status
@@ -448,4 +653,5 @@ run-all: ## Start all services (database + docling + backend)
 stop-all: ## Stop all services
 	@echo "$(BLUE)Stopping all services...$(NC)"
 	@$(MAKE) stop
+	@$(MAKE) nlp-down
 	@echo "$(GREEN)All services stopped$(NC)"

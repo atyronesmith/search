@@ -26,7 +26,7 @@ func (c *SlidingWindowChunker) SupportsFileType(fileType string) bool {
 }
 
 // Chunk chunks content using sliding window approach
-func (c *SlidingWindowChunker) Chunk(content *extractor.ExtractedContent, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SlidingWindowChunker) Chunk(content *extractor.ExtractedContent, config *Config) ([]Chunk, error) {
 	text := content.Text
 	if text == "" {
 		return []Chunk{}, nil
@@ -35,13 +35,12 @@ func (c *SlidingWindowChunker) Chunk(content *extractor.ExtractedContent, config
 	// Choose chunking method based on configuration
 	if config.SplitOnSentences {
 		return c.chunkBySentences(text, config)
-	} else {
-		return c.chunkByCharacters(text, config)
 	}
+	return c.chunkByCharacters(text, config)
 }
 
 // chunkBySentences chunks text by sentences with sliding window
-func (c *SlidingWindowChunker) chunkBySentences(text string, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SlidingWindowChunker) chunkBySentences(text string, config *Config) ([]Chunk, error) {
 	sentences := splitIntoSentences(text)
 	if len(sentences) == 0 {
 		return []Chunk{}, nil
@@ -69,7 +68,7 @@ func (c *SlidingWindowChunker) chunkBySentences(text string, config *ChunkerConf
 }
 
 // chunkByCharacters chunks text by character count with sliding window
-func (c *SlidingWindowChunker) chunkByCharacters(text string, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SlidingWindowChunker) chunkByCharacters(text string, config *Config) ([]Chunk, error) {
 	if len(text) == 0 {
 		return []Chunk{}, nil
 	}
@@ -127,7 +126,7 @@ func (c *SlidingWindowChunker) chunkByCharacters(text string, config *ChunkerCon
 }
 
 // buildSentenceChunk builds a chunk from sentences starting at index i
-func (c *SlidingWindowChunker) buildSentenceChunk(sentences []string, startIdx int, config *ChunkerConfig) Chunk {
+func (c *SlidingWindowChunker) buildSentenceChunk(sentences []string, startIdx int, config *Config) Chunk {
 	chunkBuilder := strings.Builder{}
 	sentenceCount := 0
 	
@@ -171,7 +170,7 @@ func (c *SlidingWindowChunker) buildSentenceChunk(sentences []string, startIdx i
 }
 
 // calculateNextStart calculates the next starting sentence index with overlap
-func (c *SlidingWindowChunker) calculateNextStart(sentences []string, currentStart int, config *ChunkerConfig) int {
+func (c *SlidingWindowChunker) calculateNextStart(sentences []string, currentStart int, config *Config) int {
 	// Build current chunk to understand its size
 	currentChunk := c.buildSentenceChunk(sentences, currentStart, config)
 	currentSentences := c.countSentencesInChunk(currentChunk.Content)

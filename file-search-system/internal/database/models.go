@@ -19,7 +19,7 @@ type File struct {
 	SizeBytes      int64           `json:"size_bytes"`
 	CreatedAt      *time.Time      `json:"created_at,omitempty"`
 	ModifiedAt     *time.Time      `json:"modified_at,omitempty"`
-	LastIndexed    time.Time       `json:"last_indexed"`
+	LastIndexed    *time.Time      `json:"last_indexed,omitempty"`
 	ContentHash    *string         `json:"content_hash,omitempty"`
 	IndexingStatus string          `json:"indexing_status"`
 	ErrorMessage   *string         `json:"error_message,omitempty"`
@@ -118,6 +118,7 @@ type SearchCache struct {
 // StringArray is a custom type for PostgreSQL text[] columns
 type StringArray []string
 
+// Value implements driver.Valuer for StringArray
 func (a StringArray) Value() (driver.Value, error) {
 	if len(a) == 0 {
 		return "{}", nil
@@ -125,6 +126,7 @@ func (a StringArray) Value() (driver.Value, error) {
 	return a, nil
 }
 
+// Scan implements sql.Scanner for StringArray
 func (a *StringArray) Scan(value interface{}) error {
 	if value == nil {
 		*a = []string{}
@@ -138,31 +140,48 @@ func (a *StringArray) Scan(value interface{}) error {
 // FileStatus represents the indexing status of a file
 type FileStatus string
 
+// File indexing status constants
 const (
+	// FileStatusPending indicates file is waiting to be indexed
 	FileStatusPending    FileStatus = "pending"
+	// FileStatusProcessing indicates file is being processed
 	FileStatusProcessing FileStatus = "processing"
+	// FileStatusCompleted indicates file indexing is complete
 	FileStatusCompleted  FileStatus = "completed"
+	// FileStatusError indicates file indexing failed
 	FileStatusError      FileStatus = "error"
+	// FileStatusSkipped indicates file was skipped
 	FileStatusSkipped    FileStatus = "skipped"
 )
 
 // ChangeType represents the type of file system change
 type ChangeType string
 
+// File change type constants
 const (
+	// ChangeTypeCreated indicates a new file was created
 	ChangeTypeCreated  ChangeType = "created"
+	// ChangeTypeModified indicates a file was modified
 	ChangeTypeModified ChangeType = "modified"
+	// ChangeTypeDeleted indicates a file was deleted
 	ChangeTypeDeleted  ChangeType = "deleted"
+	// ChangeTypeRenamed indicates a file was renamed
 	ChangeTypeRenamed  ChangeType = "renamed"
 )
 
 // ChunkType represents the type of text chunk
 type ChunkType string
 
+// Chunk type constants
 const (
+	// ChunkTypeSemantic indicates semantic chunking strategy
 	ChunkTypeSemantic ChunkType = "semantic"
+	// ChunkTypeCode indicates code-aware chunking
 	ChunkTypeCode     ChunkType = "code"
+	// ChunkTypeTable indicates table chunking
 	ChunkTypeTable    ChunkType = "table"
+	// ChunkTypeList indicates list chunking
 	ChunkTypeList     ChunkType = "list"
+	// ChunkTypeSliding indicates sliding window chunking
 	ChunkTypeSliding  ChunkType = "sliding"
 )

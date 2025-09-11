@@ -50,7 +50,7 @@ func NewRanker(config *RankerConfig) *Ranker {
 }
 
 // RankResults re-ranks search results with advanced scoring
-func (r *Ranker) RankResults(results []SearchResult, query string, pq *ProcessedQuery) []SearchResult {
+func (r *Ranker) RankResults(results []Result, query string, pq *ProcessedQuery) []Result {
 	if len(results) == 0 {
 		return results
 	}
@@ -92,7 +92,7 @@ func (r *Ranker) RankResults(results []SearchResult, query string, pq *Processed
 }
 
 // calculateRecencyScore calculates score based on file recency
-func (r *Ranker) calculateRecencyScore(result *SearchResult) float64 {
+func (r *Ranker) calculateRecencyScore(result *Result) float64 {
 	if result.Metadata == nil {
 		return 0
 	}
@@ -110,7 +110,7 @@ func (r *Ranker) calculateRecencyScore(result *SearchResult) float64 {
 }
 
 // calculatePathScore calculates score based on file path depth
-func (r *Ranker) calculatePathScore(result *SearchResult) float64 {
+func (r *Ranker) calculatePathScore(result *Result) float64 {
 	// Penalize deeply nested files
 	depth := strings.Count(result.FilePath, "/")
 	
@@ -126,7 +126,7 @@ func (r *Ranker) calculatePathScore(result *SearchResult) float64 {
 }
 
 // calculateTitleScore calculates score based on title/filename match
-func (r *Ranker) calculateTitleScore(result *SearchResult, query string) float64 {
+func (r *Ranker) calculateTitleScore(result *Result, query string) float64 {
 	query = strings.ToLower(query)
 	filename := strings.ToLower(result.Filename)
 	
@@ -153,7 +153,7 @@ func (r *Ranker) calculateTitleScore(result *SearchResult, query string) float64
 }
 
 // calculateExactMatchScore calculates score for exact phrase matches
-func (r *Ranker) calculateExactMatchScore(result *SearchResult, query string) float64 {
+func (r *Ranker) calculateExactMatchScore(result *Result, query string) float64 {
 	content := strings.ToLower(result.Content)
 	query = strings.ToLower(query)
 	
@@ -166,7 +166,7 @@ func (r *Ranker) calculateExactMatchScore(result *SearchResult, query string) fl
 }
 
 // calculateProximityScore calculates score based on term proximity
-func (r *Ranker) calculateProximityScore(result *SearchResult, terms []string) float64 {
+func (r *Ranker) calculateProximityScore(result *Result, terms []string) float64 {
 	if len(terms) < 2 {
 		return 0
 	}
@@ -230,7 +230,7 @@ func (r *Ranker) combineScores(baseScore, recency, path, title, exact, proximity
 }
 
 // applyDiversityBoost promotes diversity in results
-func (r *Ranker) applyDiversityBoost(results []SearchResult) []SearchResult {
+func (r *Ranker) applyDiversityBoost(results []Result) []Result {
 	// Track files we've seen
 	fileScores := make(map[int64]int)
 	
@@ -255,7 +255,7 @@ func (r *Ranker) applyDiversityBoost(results []SearchResult) []SearchResult {
 }
 
 // penalizeDuplicates reduces scores for very similar content
-func (r *Ranker) penalizeDuplicates(results []SearchResult) []SearchResult {
+func (r *Ranker) penalizeDuplicates(results []Result) []Result {
 	if len(results) < 2 {
 		return results
 	}
@@ -321,8 +321,8 @@ func (r *Ranker) calculateSimilarity(text1, text2 string) float64 {
 }
 
 // GroupResults groups results by file for better presentation
-func (r *Ranker) GroupResults(results []SearchResult) map[int64][]SearchResult {
-	grouped := make(map[int64][]SearchResult)
+func (r *Ranker) GroupResults(results []Result) map[int64][]Result {
+	grouped := make(map[int64][]Result)
 	
 	for _, result := range results {
 		grouped[result.FileID] = append(grouped[result.FileID], result)
@@ -339,8 +339,8 @@ func (r *Ranker) GroupResults(results []SearchResult) map[int64][]SearchResult {
 }
 
 // FilterByRelevance filters results by minimum relevance threshold
-func (r *Ranker) FilterByRelevance(results []SearchResult, threshold float64) []SearchResult {
-	var filtered []SearchResult
+func (r *Ranker) FilterByRelevance(results []Result, threshold float64) []Result {
+	var filtered []Result
 	
 	for _, result := range results {
 		if result.Score >= threshold {
@@ -360,7 +360,7 @@ func abs(x int) int {
 }
 
 // ReRankWithFeedback re-ranks results based on user feedback
-func (r *Ranker) ReRankWithFeedback(results []SearchResult, clickedResults []int64, ignoredResults []int64) []SearchResult {
+func (r *Ranker) ReRankWithFeedback(results []Result, clickedResults []int64, ignoredResults []int64) []Result {
 	// Create maps for quick lookup
 	clicked := make(map[int64]bool)
 	ignored := make(map[int64]bool)
@@ -401,9 +401,9 @@ func (r *Ranker) ReRankWithFeedback(results []SearchResult, clickedResults []int
 }
 
 // isSimilarResult checks if a result is similar to a clicked result
-func (r *Ranker) isSimilarResult(result *SearchResult, clickedID int64, allResults []SearchResult) bool {
+func (r *Ranker) isSimilarResult(result *Result, clickedID int64, allResults []Result) bool {
 	// Find the clicked result
-	var clickedResult *SearchResult
+	var clickedResult *Result
 	for _, res := range allResults {
 		if res.ChunkID == clickedID {
 			clickedResult = &res

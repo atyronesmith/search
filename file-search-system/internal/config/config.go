@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config represents the application configuration
 type Config struct {
 	// Database
 	DatabaseURL     string
@@ -18,6 +19,7 @@ type Config struct {
 	// Ollama
 	OllamaHost      string
 	OllamaModel     string
+	LLMModel        string
 	EmbeddingDim    int
 	OllamaTimeout   time.Duration
 
@@ -65,16 +67,47 @@ type Config struct {
 	ServiceName      string
 	ServiceAutoStart bool
 	StartDelay       time.Duration
+
+	// Additional fields for config file support
+	ConfigFile       string        // Path to config file being used
+	ServerHost       string        // Server host
+	ServerPort       int           // Server port
+	ReadTimeout      time.Duration // Server read timeout
+	WriteTimeout     time.Duration // Server write timeout
+	IgnorePatterns   []string      // Patterns to ignore during indexing
+	IndexingRate     int           // Files per minute
+	EmbeddingRate    int           // Embeddings per minute
+	SearchRate       int           // Searches per minute
+	OllamaURL        string        // Full Ollama service URL
+	OllamaMaxRetries int           // Max retries for Ollama
+	VectorWeight     float64       // Vector search weight
+	BM25Weight       float64       // BM25 search weight
+	MetadataWeight   float64       // Metadata search weight
+	CacheTTL         time.Duration // Cache TTL
+	CacheSize        int           // Cache size
+	NLPServiceURL    string        // NLP service URL
+	NLPTimeout       time.Duration // NLP service timeout
+	NLPEnabled       bool          // NLP enabled flag
+	LogFormat        string        // Log format (json/text)
+	DevMode          bool          // Development mode
+	HotReload        bool          // Hot reload enabled
+	Debug            bool          // Debug mode
 }
 
+// Load loads configuration from environment variables
 func Load(path string) (*Config, error) {
-	// Load .env file if it exists
+	// Load .env file if provided
 	if path != "" {
 		if err := godotenv.Load(path); err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
 	}
+	
+	return LoadFromEnv()
+}
 
+// LoadFromEnv loads configuration from environment variables
+func LoadFromEnv() (*Config, error) {
 	cfg := &Config{
 		// Database defaults
 		DatabaseURL:     getEnv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/file_search?sslmode=disable"),
@@ -84,6 +117,7 @@ func Load(path string) (*Config, error) {
 		// Ollama defaults
 		OllamaHost:    getEnv("OLLAMA_HOST", "http://localhost:11434"),
 		OllamaModel:   getEnv("OLLAMA_MODEL", "nomic-embed-text"),
+		LLMModel:      getEnv("LLM_MODEL", "phi3:mini"),
 		EmbeddingDim:  getEnvInt("OLLAMA_EMBEDDING_DIM", 768),
 		OllamaTimeout: getEnvDuration("OLLAMA_TIMEOUT", "30s"),
 
@@ -97,7 +131,7 @@ func Load(path string) (*Config, error) {
 		IndexMaxFileSizeMB: getEnvInt("INDEX_MAX_FILE_SIZE_MB", 100),
 		IndexChunkSize:     getEnvInt("INDEX_CHUNK_SIZE", 512),
 		IndexChunkOverlap:  getEnvInt("INDEX_CHUNK_OVERLAP", 64),
-		IndexWorkers:       getEnvInt("INDEX_WORKERS", 4),
+		IndexWorkers:       getEnvInt("INDEX_WORKERS", 1),
 
 		// File Monitoring defaults
 		WatchPaths:          getEnvStringSlice("WATCH_PATHS", []string{"~/Documents", "~/Desktop", "~/Downloads"}),

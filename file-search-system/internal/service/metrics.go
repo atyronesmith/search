@@ -60,8 +60,8 @@ type DataPoint struct {
 	Tags      map[string]string `json:"tags,omitempty"`
 }
 
-// ServiceMetrics represents all collected service metrics
-type ServiceMetrics struct {
+// Metrics represents all collected service metrics
+type Metrics struct {
 	// System metrics
 	Uptime             time.Duration `json:"uptime"`
 	CPUPercent         float64       `json:"cpu_percent"`
@@ -161,12 +161,12 @@ func (mc *MetricsCollector) Stop() {
 }
 
 // GetMetrics returns current service metrics
-func (mc *MetricsCollector) GetMetrics() *ServiceMetrics {
+func (mc *MetricsCollector) GetMetrics() *Metrics {
 	mc.metricsLock.RLock()
 	defer mc.metricsLock.RUnlock()
 	
 	// Collect current metrics
-	metrics := &ServiceMetrics{
+	metrics := &Metrics{
 		Uptime: time.Since(mc.service.startTime),
 	}
 	

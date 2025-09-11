@@ -23,6 +23,7 @@ type Scanner struct {
 	ignorePatterns  []string
 }
 
+// ScannerConfig represents the configuration for the file scanner
 type ScannerConfig struct {
 	WatchPaths      []string
 	MaxFileSizeMB   int
@@ -30,6 +31,7 @@ type ScannerConfig struct {
 	SupportedTypes  []string
 }
 
+// NewScanner creates a new file scanner instance
 func NewScanner(db *database.DB, config *ScannerConfig, log *logrus.Logger) *Scanner {
 	supportedExts := make(map[string]bool)
 	for _, ext := range config.SupportedTypes {
@@ -292,30 +294,67 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 func (s *Scanner) determineFileType(ext string) string {
 	ext = strings.ToLower(ext)
 	
-	documentExts := map[string]bool{
-		".pdf": true, ".doc": true, ".docx": true,
+	// More specific file type mapping
+	switch ext {
+	// Document types
+	case ".pdf":
+		return "pdf"
+	case ".doc":
+		return "doc"
+	case ".docx":
+		return "docx"
+	case ".rtf":
+		return "rtf"
+	case ".odt":
+		return "odt"
+		
+	// Spreadsheet types
+	case ".xls":
+		return "xls"
+	case ".xlsx":
+		return "xlsx"
+	case ".csv":
+		return "csv"
+	case ".ods":
+		return "ods"
+		
+	// Code types
+	case ".py":
+		return "python"
+	case ".js":
+		return "javascript"
+	case ".ts":
+		return "typescript"
+	case ".jsx":
+		return "javascript"
+	case ".tsx":
+		return "typescript"
+	case ".java":
+		return "java"
+	case ".cpp", ".cc", ".cxx":
+		return "cpp"
+	case ".c":
+		return "c"
+	case ".go":
+		return "go"
+	case ".rs":
+		return "rust"
+	case ".json":
+		return "json"
+	case ".yaml", ".yml":
+		return "yaml"
+		
+	// Text types
+	case ".txt":
+		return "text"
+	case ".md":
+		return "markdown"
+		
+	// Image types
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg":
+		return "image"
+		
+	default:
+		return "text"
 	}
-	
-	spreadsheetExts := map[string]bool{
-		".xls": true, ".xlsx": true, ".csv": true,
-	}
-	
-	codeExts := map[string]bool{
-		".py": true, ".js": true, ".ts": true,
-		".jsx": true, ".tsx": true, ".java": true,
-		".cpp": true, ".c": true, ".go": true,
-		".rs": true, ".json": true, ".yaml": true,
-		".yml": true,
-	}
-	
-	if documentExts[ext] {
-		return "document"
-	}
-	if spreadsheetExts[ext] {
-		return "spreadsheet"
-	}
-	if codeExts[ext] {
-		return "code"
-	}
-	return "text"
 }

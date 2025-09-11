@@ -255,6 +255,26 @@ function SettingsPage() {
                 </p>
               )}
             </div>
+            <div className="form-group">
+              <label>
+                LLM Model (for query enhancement)
+                {loadingModels && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>Loading models...</span>}
+              </label>
+              <select
+                value={config.LLMModel || 'phi3:mini'}
+                onChange={(e) => updateConfig('LLMModel', e.target.value)}
+                disabled={loadingModels}
+              >
+                <option value="phi3:mini">phi3:mini (recommended)</option>
+                <option value="qwen3:4b">qwen3:4b (slower but more capable)</option>
+                {availableModels.filter(model => model !== 'phi3:mini' && model !== 'qwen3:4b' && !model.includes('embed')).map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                Model used for natural language query understanding and enhancement
+              </p>
+            </div>
           </div>
         </div>
 

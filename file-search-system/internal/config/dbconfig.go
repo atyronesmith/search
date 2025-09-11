@@ -17,8 +17,8 @@ type DBConfigService struct {
 	db *database.DB
 }
 
-// ConfigValue represents a configuration value from the database
-type ConfigValue struct {
+// Value represents a configuration value from the database
+type Value struct {
 	Key         string    `json:"key"`
 	Value       string    `json:"value"`
 	Type        string    `json:"type"`
@@ -53,7 +53,7 @@ func (c *DBConfigService) GetConfig(ctx context.Context) (*Config, error) {
 	config := &Config{}
 	
 	for rows.Next() {
-		var cv ConfigValue
+		var cv Value
 		if err := rows.Scan(&cv.Key, &cv.Value, &cv.Type, &cv.Description, &cv.Category, &cv.CreatedAt, &cv.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan config row: %w", err)
 		}
@@ -190,7 +190,7 @@ func (c *DBConfigService) updateConfigValue(ctx context.Context, key string, val
 }
 
 // mapConfigValue maps a database config value to the Config struct
-func (c *DBConfigService) mapConfigValue(config *Config, cv ConfigValue) error {
+func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 	switch cv.Key {
 	// Database
 	case "database_url":

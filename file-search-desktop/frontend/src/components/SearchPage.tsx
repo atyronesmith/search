@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface SearchResult {
   id: string
@@ -44,6 +44,7 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
   const [totalResults, setTotalResults] = useState(0)
   const [enhancedQuery, setEnhancedQuery] = useState<EnhancedQuery | null>(null)
   const [usedLLM, setUsedLLM] = useState(false)
+  const [currentLLMModel, setCurrentLLMModel] = useState<string>('unknown')
   const resultsPerPage = 10
 
   const handleSearch = async () => {
@@ -56,6 +57,17 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
     try {
       const isLLM = await window.go.main.App.IsLLMQuery(query)
       setIsLLMQuery(isLLM)
+      
+      // If it's an LLM query, fetch the current LLM model
+      if (isLLM) {
+        try {
+          const model = await window.go.main.App.GetCurrentLLMModel()
+          setCurrentLLMModel(model)
+        } catch (modelError) {
+          console.warn('Failed to get current LLM model:', modelError)
+          setCurrentLLMModel('unknown')
+        }
+      }
     } catch (error) {
       console.warn('Failed to check LLM query status:', error)
       setIsLLMQuery(false)
@@ -293,7 +305,7 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
             color: '#007bff',
             marginBottom: '10px'
           }}>
-            🤖 AI Enhancement Active
+            🤖 AI Enhancement Active ({currentLLMModel})
           </div>
           <div style={{
             fontSize: '16px',

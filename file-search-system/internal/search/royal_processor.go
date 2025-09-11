@@ -1,12 +1,13 @@
 package search
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 	
-	"context"
+	"github.com/file-search/file-search-system/internal/database"
 )
 
 // RoyalSearchTerms represents the comprehensive search term structure
@@ -19,12 +20,25 @@ type RoyalSearchTerms struct {
 	MetadataBoostFields []string                   `json:"metadata_boost_fields,omitempty"`
 }
 
+// ParseErrorWithResponse contains both the parsing error and the raw LLM response
+type ParseErrorWithResponse struct {
+	Err         error
+	RawResponse string
+}
+
+// Error implements the error interface
+func (e *ParseErrorWithResponse) Error() string {
+	return e.Err.Error()
+}
+
 // RoyalSearchProcessor handles advanced search term extraction using LLM
 type RoyalSearchProcessor struct {
 	ollamaClient    *OllamaClient
 	model           string
 	enabled         bool
 	corpusMetadata  *CorpusMetadata
+	db              *database.DB
+	promptTemplate  string
 }
 
 // CorpusMetadata represents analyzed metadata patterns from the document corpus
@@ -43,11 +57,12 @@ type CorpusMetadata struct {
 }
 
 // NewRoyalSearchProcessor creates a new royal search processor
-func NewRoyalSearchProcessor(ollamaURL string) *RoyalSearchProcessor {
+func NewRoyalSearchProcessor(ollamaURL string, modelName string, db *database.DB) *RoyalSearchProcessor {
 	processor := &RoyalSearchProcessor{
 		ollamaClient: NewOllamaClient(ollamaURL),
-		model:        "qwen3:4b", // Better semantic understanding for search
+		model:        modelName,
 		enabled:      true,
+		db:           db,
 	}
 	
 	// Initialize with default corpus metadata
@@ -61,72 +76,49 @@ func NewRoyalSearchProcessor(ollamaURL string) *RoyalSearchProcessor {
 		LastAnalyzed:  "",
 	}
 	
+	// Load prompt template from database
+	processor.loadPromptTemplate()
+	
 	return processor
 }
 
-// GenerateSearchTerms generates comprehensive search terms for hybrid search
-func (r *RoyalSearchProcessor) GenerateSearchTerms(query string, searchContext string) (*RoyalSearchTerms, error) {
-	if !r.enabled {
-		return r.fallbackTerms(query), nil
+// loadPromptTemplate loads the LLM prompt template from the database
+func (r *RoyalSearchProcessor) loadPromptTemplate() {
+	if r.db == nil {
+		r.promptTemplate = r.getDefaultPromptTemplate()
+		return
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	prompt := r.buildPrompt(query, searchContext)
 	
-	response, err := r.ollamaClient.Generate(ctx, r.model, prompt)
+	query := `SELECT config_value FROM system_config WHERE config_key = 'llm_prompt_template'`
+	err := r.db.QueryRow(ctx, query).Scan(&r.promptTemplate)
 	if err != nil {
-		fmt.Printf("DEBUG: Royal processor Ollama error: %v\n", err)
-		// Fallback to basic extraction on error
-		return r.fallbackTerms(query), nil
+		fmt.Printf("DEBUG: Failed to load prompt template from database: %v, using default\n", err)
+		r.promptTemplate = r.getDefaultPromptTemplate()
+		return
 	}
 	
-	fmt.Printf("DEBUG: Royal processor raw response: %s\n", response)
-	fmt.Printf("DEBUG: Royal processor raw response length: %d\n", len(response))
-
-	// Parse the JSON response
-	var terms RoyalSearchTerms
-	if err := json.Unmarshal([]byte(response), &terms); err != nil {
-		// Try to extract what we can from malformed response
-		return r.parsePartialResponse(response, query), nil
-	}
-
-	// Validate and clean the terms
-	terms = r.validateAndClean(terms, query)
-	
-	return &terms, nil
+	fmt.Printf("DEBUG: Loaded prompt template from database (length: %d)\n", len(r.promptTemplate))
 }
 
-// buildPrompt constructs the comprehensive prompt for search term extraction
-func (r *RoyalSearchProcessor) buildPrompt(query, searchContext string) string {
-	if searchContext == "" {
-		searchContext = "General file search"
-	}
-
-	// Join corpus metadata for context
-	docTypes := strings.Join(r.corpusMetadata.DocumentTypes, ", ")
-	departments := strings.Join(r.corpusMetadata.Departments, ", ")
-	categories := strings.Join(r.corpusMetadata.Categories, ", ")
-	timeRange := r.corpusMetadata.TimeRange.Start + " to " + r.corpusMetadata.TimeRange.End
-	if timeRange == " to " {
-		timeRange = "2020-01-01 to 2025-12-31"
-	}
-
-	return fmt.Sprintf(`You are an expert search term extraction system with access to document metadata for optimized hybrid search.
+// getDefaultPromptTemplate returns the default hardcoded prompt template as fallback
+func (r *RoyalSearchProcessor) getDefaultPromptTemplate() string {
+	return `You are an expert search term extraction system with access to document metadata for optimized hybrid search.
 
 TASK: Generate search terms considering both the query and document metadata patterns in the corpus. For emotional or abstract queries, generate related terms, synonyms, and conceptually similar words.
 
-USER QUERY: %s
+USER QUERY: {{USER_QUERY}}
 
 AVAILABLE METADATA CONTEXT:
-- Document Types in Corpus: %s
-- Time Range of Documents: %s
-- Common Categories: %s
-- Departments/Projects: %s
-- Total Files: %d
+- Document Types in Corpus: {{DOC_TYPES}}
+- Time Range of Documents: {{TIME_RANGE}}
+- Common Categories: {{CATEGORIES}}
+- Departments/Projects: {{DEPARTMENTS}}
+- Total Files: {{TOTAL_FILES}}
 
-SEARCH CONTEXT: %s
+SEARCH CONTEXT: Query type: analytical, Intent: search
 
 METADATA-AWARE EXTRACTION RULES:
 1. If query implies time-sensitivity, emphasize temporal search terms
@@ -152,93 +144,137 @@ ENHANCED OUTPUT STRUCTURE:
       "end": "ISO date or null"
     },
     "categories": ["relevant Unstructured categories"],
-    "departments": ["relevant departments if applicable"],
-    "document_types": ["report", "email", "memo", etc.],
+    "departments": [],
+    "document_types": ["report", "email", "memo", "etc."],
     "confidence_threshold": 0.7
   },
-  "pg_tsquery": "optimized PostgreSQL query",
+  "pg_tsquery": "simple PostgreSQL tsquery using only &, |, ! operators with single words",
   "search_strategy": "explanation of approach",
   "metadata_boost_fields": ["fields to prioritize in ranking"]
 }
 
-METADATA-INFORMED EXAMPLES:
-
-Query: "Find files that are sad"
-{
-  "vector_terms": [
-    "sad emotional content",
-    "depressing melancholy documents",
-    "unhappy sorrowful text",
-    "tragic loss grief",
-    "negative emotional tone"
-  ],
-  "text_terms": [
-    "sad",
-    "unhappy",
-    "depressed",
-    "melancholy",
-    "sorrow",
-    "grief",
-    "loss",
-    "tragic",
-    "tears",
-    "mourning"
-  ],
-  "metadata_filters": {
-    "file_types": ["pdf", "docx", "txt"],
-    "categories": ["NarrativeText"],
-    "confidence_threshold": 0.6
-  },
-  "pg_tsquery": "sad | unhappy | depressed | melancholy | sorrow | grief | loss | tragic",
-  "search_strategy": "Semantic search for emotional content with negative sentiment",
-  "metadata_boost_fields": ["content", "title"]
-}
-
-Query: "Q3 financial reports from finance team"
-{
-  "vector_terms": [
-    "third quarter financial reports",
-    "Q3 finance department documents", 
-    "quarterly financial statements Q3",
-    "finance team Q3 reporting",
-    "third quarter fiscal documentation"
-  ],
-  "text_terms": [
-    "q3",
-    "third", 
-    "quarter",
-    "financial",
-    "finance",
-    "report", 
-    "fiscal",
-    "revenue",
-    "expense",
-    "budget"
-  ],
-  "metadata_filters": {
-    "file_types": ["pdf", "xlsx", "docx"],
-    "date_range": {
-      "start": "2024-07-01",
-      "end": "2024-09-30"
-    },
-    "categories": ["Table", "FigureCaption", "NarrativeText"],
-    "departments": ["finance", "accounting"],
-    "document_types": ["report", "spreadsheet"],
-    "confidence_threshold": 0.8
-  },
-  "pg_tsquery": "(q3 | third & quarter) & (financial | finance) & report",
-  "search_strategy": "Focus on Q3 time period with finance department filtering",
-  "metadata_boost_fields": ["created_date", "department", "document_type"]
-}
-
 IMPORTANT:
-- Return ONLY the JSON object, no additional text
-- Ensure all JSON is properly formatted and valid
+- Return ONLY the JSON object, no additional text or comments
+- Ensure all JSON is properly formatted and valid - NO COMMENTS IN JSON
 - Generate 5 vector_terms and 8-10 text_terms
-- The pg_tsquery must be valid PostgreSQL syntax
+- The pg_tsquery MUST use ONLY simple PostgreSQL tsquery operators: & (AND), | (OR), ! (NOT)
+- DO NOT use date ranges, complex syntax, or invalid operators in pg_tsquery
+- Use only single words or simple phrases in pg_tsquery
+- EXAMPLE VALID: "taxi | cab", "taxi & transport", "!spam"
+- EXAMPLE INVALID: "AND (2020-01-01 TO 2025-12-31)", "&:all", "-&-", complex phrases
 - Adapt term complexity based on query sophistication
+- JSON must be parseable - do not include any explanatory text or comments within the JSON structure
+- NEVER use // or /* */ comments in the JSON output
+- For empty arrays, use [] without any comments or explanations
 
-JSON OUTPUT:`, query, docTypes, timeRange, categories, departments, r.corpusMetadata.TotalFiles, searchContext)
+
+formatted syntactically correct JSON OUTPUT:`
+}
+
+// GenerateSearchTerms generates comprehensive search terms for hybrid search
+func (r *RoyalSearchProcessor) GenerateSearchTerms(query string, searchContext string) (*RoyalSearchTerms, error) {
+	return r.GenerateSearchTermsWithDebug(query, searchContext, nil)
+}
+
+// GenerateSearchTermsWithDebug generates search terms and captures debug information
+func (r *RoyalSearchProcessor) GenerateSearchTermsWithDebug(query string, searchContext string, debugCallback func(string, string, string, int64)) (*RoyalSearchTerms, error) {
+	if !r.enabled {
+		return r.fallbackTerms(query), nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	startTime := time.Now()
+	prompt := r.buildPrompt(query, searchContext)
+	
+	fmt.Printf("DEBUG: Calling LLM with model=%s, query='%s'\n", r.model, query)
+	response, err := r.ollamaClient.Generate(ctx, r.model, prompt)
+	processTime := time.Since(startTime).Milliseconds()
+	fmt.Printf("DEBUG: LLM call completed in %dms, err=%v\n", processTime, err)
+	
+	// Call debug callback if provided
+	if debugCallback != nil {
+		errorMsg := ""
+		if err != nil {
+			errorMsg = err.Error()
+		}
+		debugCallback(prompt, response, errorMsg, processTime)
+	}
+	
+	if err != nil {
+		fmt.Printf("DEBUG: Royal processor Ollama error: %v\n", err)
+		// Fallback to basic extraction on error
+		return r.fallbackTerms(query), nil
+	}
+	
+	fmt.Printf("DEBUG: Royal processor raw response: %s\n", response)
+	fmt.Printf("DEBUG: Royal processor raw response length: %d\n", len(response))
+
+	// Clean the response - remove markdown code blocks if present
+	cleanedResponse := strings.TrimSpace(response)
+	if strings.HasPrefix(cleanedResponse, "```json") && strings.HasSuffix(cleanedResponse, "```") {
+		// Remove ```json from the beginning and ``` from the end
+		cleanedResponse = strings.TrimPrefix(cleanedResponse, "```json")
+		cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
+		cleanedResponse = strings.TrimSpace(cleanedResponse)
+	} else if strings.HasPrefix(cleanedResponse, "```") && strings.HasSuffix(cleanedResponse, "```") {
+		// Remove ``` from both ends
+		cleanedResponse = strings.TrimPrefix(cleanedResponse, "```")
+		cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
+		cleanedResponse = strings.TrimSpace(cleanedResponse)
+	}
+
+	// Remove JSON comments (// ... until end of line)
+	cleanedResponse = RemoveJSONComments(cleanedResponse)
+
+	// Parse the JSON response
+	var terms RoyalSearchTerms
+	if err := json.Unmarshal([]byte(cleanedResponse), &terms); err != nil {
+		// Return error with raw response so it can be reused
+		return nil, &ParseErrorWithResponse{
+			Err:         fmt.Errorf("JSON parsing failed: %w", err),
+			RawResponse: response,
+		}
+	}
+
+	// Validate and clean the terms
+	terms = r.validateAndClean(terms, query)
+	
+	return &terms, nil
+}
+
+// buildPrompt constructs the comprehensive prompt for search term extraction using template substitution
+func (r *RoyalSearchProcessor) buildPrompt(query, searchContext string) string {
+	if searchContext == "" {
+		searchContext = "General file search"
+	}
+
+	// Prepare template variables
+	docTypes := strings.Join(r.corpusMetadata.DocumentTypes, ", ")
+	departments := strings.Join(r.corpusMetadata.Departments, ", ")
+	categories := strings.Join(r.corpusMetadata.Categories, ", ")
+	timeRange := r.corpusMetadata.TimeRange.Start + " to " + r.corpusMetadata.TimeRange.End
+	if timeRange == " to " {
+		timeRange = "2020-01-01 to 2025-12-31"
+	}
+	totalFiles := fmt.Sprintf("%d", r.corpusMetadata.TotalFiles)
+
+	// Use the loaded prompt template with variable substitution
+	prompt := r.promptTemplate
+	if prompt == "" {
+		prompt = r.getDefaultPromptTemplate()
+	}
+	
+	// Perform template variable substitution
+	prompt = strings.ReplaceAll(prompt, "{{USER_QUERY}}", query)
+	prompt = strings.ReplaceAll(prompt, "{{DOC_TYPES}}", docTypes)
+	prompt = strings.ReplaceAll(prompt, "{{TIME_RANGE}}", timeRange)
+	prompt = strings.ReplaceAll(prompt, "{{CATEGORIES}}", categories)
+	prompt = strings.ReplaceAll(prompt, "{{DEPARTMENTS}}", departments)
+	prompt = strings.ReplaceAll(prompt, "{{TOTAL_FILES}}", totalFiles)
+	
+	return prompt
 }
 
 // fallbackTerms generates basic search terms when LLM is unavailable
@@ -370,7 +406,7 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 	}
 	terms.TextTerms = cleanedText
 	
-	// Validate pg_tsquery - ensure it's not empty
+	// Validate pg_tsquery - ensure it's not empty and clean it
 	if terms.PgTsQuery == "" || len(terms.PgTsQuery) < 3 {
 		// Generate simple query from text terms
 		if len(terms.TextTerms) > 0 {
@@ -382,6 +418,48 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 			terms.PgTsQuery = strings.Join(terms.TextTerms[:limit], " & ")
 		} else {
 			terms.PgTsQuery = strings.ToLower(originalQuery)
+		}
+	} else {
+		// Clean the tsquery - remove query meta words that don't appear in content
+		queryMetaWords := []string{"files", "contain", "word", "find", "all", "show", "list", "get", "that", "the", "a", "an", "with"}
+		cleanedQuery := terms.PgTsQuery
+		
+		// Remove meta words from the query
+		for _, metaWord := range queryMetaWords {
+			cleanedQuery = strings.ReplaceAll(cleanedQuery, metaWord+" & ", "")
+			cleanedQuery = strings.ReplaceAll(cleanedQuery, " & "+metaWord, "")
+			cleanedQuery = strings.ReplaceAll(cleanedQuery, metaWord+" | ", "")
+			cleanedQuery = strings.ReplaceAll(cleanedQuery, " | "+metaWord, "")
+			if cleanedQuery == metaWord {
+				cleanedQuery = ""
+			}
+		}
+		
+		// Clean up remaining operators
+		cleanedQuery = strings.TrimSpace(cleanedQuery)
+		cleanedQuery = strings.Trim(cleanedQuery, "&|")
+		cleanedQuery = strings.TrimSpace(cleanedQuery)
+		
+		// If we removed everything, fall back to extracting key terms from original query
+		if cleanedQuery == "" {
+			// Extract actual content words from original query
+			words := strings.Fields(strings.ToLower(originalQuery))
+			var contentWords []string
+			stopWords := map[string]bool{
+				"find": true, "all": true, "files": true, "that": true, "contain": true, "the": true, "word": true, "show": true, "list": true, "get": true,
+			}
+			for _, word := range words {
+				if !stopWords[word] && len(word) > 2 {
+					contentWords = append(contentWords, word)
+				}
+			}
+			if len(contentWords) > 0 {
+				cleanedQuery = strings.Join(contentWords, " | ")
+			}
+		}
+		
+		if cleanedQuery != "" {
+			terms.PgTsQuery = cleanedQuery
 		}
 	}
 	
@@ -431,4 +509,70 @@ func (r *RoyalSearchProcessor) IsEnabled() bool {
 // SetModel changes the LLM model used for processing
 func (r *RoyalSearchProcessor) SetModel(model string) {
 	r.model = model
+}
+
+// ReloadPromptTemplate reloads the prompt template from the database
+func (r *RoyalSearchProcessor) ReloadPromptTemplate() {
+	r.loadPromptTemplate()
+}
+
+// GetPromptTemplate returns the current prompt template
+func (r *RoyalSearchProcessor) GetPromptTemplate() string {
+	return r.promptTemplate
+}
+
+// RemoveJSONComments removes single-line comments (// ...) from JSON strings
+// It's exported so it can be used from other files in the package
+func RemoveJSONComments(jsonStr string) string {
+	var result strings.Builder
+	lines := strings.Split(jsonStr, "\n")
+	
+	for _, line := range lines {
+		processedLine := ""
+		inString := false
+		escaped := false
+		
+		// Process character by character to track if we're in a string
+		for i := 0; i < len(line); i++ {
+			ch := line[i]
+			
+			// Handle escape sequences
+			if escaped {
+				processedLine += string(ch)
+				escaped = false
+				continue
+			}
+			
+			// Check for escape character
+			if ch == '\\' && inString {
+				processedLine += string(ch)
+				escaped = true
+				continue
+			}
+			
+			// Toggle string state on unescaped quotes
+			if ch == '"' {
+				processedLine += string(ch)
+				inString = !inString
+				continue
+			}
+			
+			// Check for comment start when not in a string
+			if !inString && i+1 < len(line) && ch == '/' && line[i+1] == '/' {
+				// Found a comment outside of a string, stop processing this line
+				break
+			}
+			
+			// Add the character to the processed line
+			processedLine += string(ch)
+		}
+		
+		// Add the processed line to the result
+		if processedLine != "" || line == "" {
+			result.WriteString(processedLine)
+			result.WriteString("\n")
+		}
+	}
+	
+	return strings.TrimSpace(result.String())
 }

@@ -65,7 +65,171 @@ INSERT INTO system_config (config_key, config_value, config_type, description, c
     ('docling_enabled', 'true', 'boolean', 'Enable Docling service for document processing', 'docling'),
     ('docling_service_url', 'http://localhost:8082', 'string', 'Docling service URL', 'docling'),
     ('docling_timeout', '300', 'number', 'Docling service timeout in seconds', 'docling'),
-    ('docling_fallback', 'true', 'boolean', 'Use fallback extraction when Docling fails', 'docling')
+    ('docling_fallback', 'true', 'boolean', 'Use fallback extraction when Docling fails', 'docling'),
+    
+    -- LLM Prompt Configuration
+    ('llm_prompt_template', 'You are an expert search term extraction system with access to document metadata for optimized hybrid search.
+
+TASK: Generate search terms considering both the query and document metadata patterns in the corpus. For emotional or abstract queries, generate related terms, synonyms, and conceptually similar words.
+
+USER QUERY: {{USER_QUERY}}
+
+AVAILABLE METADATA CONTEXT:
+- Document Types in Corpus: {{DOC_TYPES}}
+- Time Range of Documents: {{TIME_RANGE}}
+- Common Categories: {{CATEGORIES}}
+- Departments/Projects: {{DEPARTMENTS}}
+- Total Files: {{TOTAL_FILES}}
+
+SEARCH CONTEXT: Query type: analytical, Intent: search
+
+METADATA-AWARE EXTRACTION RULES:
+1. If query implies time-sensitivity, emphasize temporal search terms
+2. If query mentions document types (report, email, memo), include type-specific terms  
+3. For departmental queries, include relevant organizational terms
+4. Consider document hierarchy (section headers, chapters) for navigation queries
+5. Weight terms based on metadata frequency in corpus
+
+ENHANCED OUTPUT STRUCTURE:
+{
+  "vector_terms": [
+    "semantic phrases matching query intent",
+    "additional 3-5 contextual phrases"
+  ],
+  "text_terms": [
+    "keywords from query", 
+    "additional 6-8 relevant terms"
+  ],
+  "metadata_filters": {
+    "file_types": ["relevant file extensions"],
+    "date_range": {
+      "start": "ISO date or null",
+      "end": "ISO date or null"
+    },
+    "categories": ["relevant Unstructured categories"],
+    "departments": [],
+    "document_types": ["report", "email", "memo", "etc."],
+    "confidence_threshold": 0.7
+  },
+  "pg_tsquery": "simple PostgreSQL tsquery using only &, |, ! operators with single words",
+  "search_strategy": "explanation of approach",
+  "metadata_boost_fields": ["fields to prioritize in ranking"]
+}
+
+METADATA-INFORMED EXAMPLES:
+
+Query: "Find files that contain the word taxi"
+{
+  "vector_terms": [
+    "taxi transportation services",
+    "cab hailing documents", 
+    "yellow cab records",
+    "ride sharing references",
+    "vehicle hire content"
+  ],
+  "text_terms": [
+    "taxi",
+    "cab", 
+    "taxicab",
+    "transport",
+    "ride",
+    "vehicle",
+    "driver",
+    "fare",
+    "city",
+    "street"
+  ],
+  "metadata_filters": {
+    "file_types": ["csv", "pdf", "txt"],
+    "confidence_threshold": 0.7
+  },
+  "pg_tsquery": "taxi | cab | taxicab",
+  "search_strategy": "Simple keyword search for taxi-related content",
+  "metadata_boost_fields": ["content", "title"]
+}
+
+Query: "Find files that are sad"
+{
+  "vector_terms": [
+    "sad emotional content",
+    "depressing melancholy documents",
+    "unhappy sorrowful text",
+    "tragic loss grief",
+    "negative emotional tone"
+  ],
+  "text_terms": [
+    "sad",
+    "unhappy",
+    "depressed",
+    "melancholy",
+    "sorrow",
+    "grief",
+    "loss",
+    "tragic",
+    "tears",
+    "mourning"
+  ],
+  "metadata_filters": {
+    "file_types": ["pdf", "docx", "txt"],
+    "categories": ["NarrativeText"],
+    "confidence_threshold": 0.6
+  },
+  "pg_tsquery": "sad | unhappy | depressed",
+  "search_strategy": "Semantic search for emotional content with negative sentiment",
+  "metadata_boost_fields": ["content", "title"]
+}
+
+Query: "Q3 financial reports from finance team"
+{
+  "vector_terms": [
+    "third quarter financial reports",
+    "Q3 finance department documents", 
+    "quarterly financial statements Q3",
+    "finance team Q3 reporting",
+    "third quarter fiscal documentation"
+  ],
+  "text_terms": [
+    "q3",
+    "third", 
+    "quarter",
+    "financial",
+    "finance",
+    "report", 
+    "fiscal",
+    "revenue",
+    "expense",
+    "budget"
+  ],
+  "metadata_filters": {
+    "file_types": ["pdf", "xlsx", "docx"],
+    "date_range": {
+      "start": "2024-07-01",
+      "end": "2024-09-30"
+    },
+    "categories": ["Table", "FigureCaption", "NarrativeText"],
+    "departments": ["finance", "accounting"],
+    "document_types": ["report", "spreadsheet"],
+    "confidence_threshold": 0.8
+  },
+  "pg_tsquery": "q3 & financial & report",
+  "search_strategy": "Focus on Q3 time period with finance department filtering",
+  "metadata_boost_fields": ["created_date", "department", "document_type"]
+}
+
+IMPORTANT:
+- Return ONLY the JSON object, no additional text or comments
+- Ensure all JSON is properly formatted and valid - NO COMMENTS IN JSON
+- Generate 5 vector_terms and 8-10 text_terms
+- The pg_tsquery MUST use ONLY simple PostgreSQL tsquery operators: & (AND), | (OR), ! (NOT)
+- DO NOT use date ranges, complex syntax, or invalid operators in pg_tsquery
+- Use only single words or simple phrases in pg_tsquery
+- EXAMPLE VALID: "taxi | cab", "taxi & transport", "!spam"
+- EXAMPLE INVALID: "AND (2020-01-01 TO 2025-12-31)", "&:all", "-&-", complex phrases
+- Adapt term complexity based on query sophistication
+- JSON must be parseable - do not include any explanatory text or comments within the JSON structure
+
+
+formatted syntactically correct JSON OUTPUT:', 'string', 'LLM prompt template for search term extraction', 'ai')
 ON CONFLICT (config_key) DO UPDATE SET
     config_value = EXCLUDED.config_value,
     description = EXCLUDED.description,

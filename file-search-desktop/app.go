@@ -50,6 +50,7 @@ type IndexingStatus struct {
 	FilesProcessed  int    `json:"filesProcessed"`
 	TotalFiles      int    `json:"totalFiles"`
 	PendingFiles    int    `json:"pendingFiles"`
+	ProcessingFiles int    `json:"processingFiles"`
 	CurrentFile     string `json:"currentFile"`
 	Errors          int    `json:"errors"`
 	ElapsedTime     int64  `json:"elapsedTime"`
@@ -67,6 +68,19 @@ type SystemStatus struct {
 	Embeddings     map[string]interface{} `json:"embeddings"`
 	Indexing       map[string]interface{} `json:"indexing"`
 	Resources      map[string]interface{} `json:"resources"`
+}
+
+// DebugInfo represents LLM debug information
+type DebugInfo struct {
+	Timestamp     string `json:"timestamp"`
+	Query         string `json:"query"`
+	Model         string `json:"model"`
+	Prompt        string `json:"prompt"`
+	Response      string `json:"response"`
+	ProcessTimeMs int64  `json:"process_time_ms"`
+	Error         string `json:"error,omitempty"`
+	VectorQuery   string `json:"vector_query,omitempty"`
+	TextQuery     string `json:"text_query,omitempty"`
 }
 
 // NewApp creates a new App application struct
@@ -262,6 +276,19 @@ func (a *App) ResumeIndexing() error {
 	return nil
 }
 
+// ReindexFailed reindexes all failed files via the API
+func (a *App) ReindexFailed() error {
+	log.Println("Reindexing failed files")
+	
+	err := a.apiClient.ReindexFailed()
+	if err != nil {
+		log.Printf("Failed to reindex failed files: %v", err)
+		return err
+	}
+	
+	return nil
+}
+
 // GetIndexingStatus returns the current indexing status from the API
 func (a *App) GetIndexingStatus() (IndexingStatus, error) {
 	status, err := a.apiClient.GetIndexingStatus()
@@ -329,6 +356,38 @@ func (a *App) GetFiles(limit, offset int) ([]map[string]interface{}, error) {
 	return files, nil
 }
 
+// GetFilesSorted returns a sorted list of indexed files from the API
+func (a *App) GetFilesSorted(limit, offset int, sortBy, sortDir string) ([]map[string]interface{}, error) {
+	files, err := a.apiClient.GetFilesSorted(limit, offset, sortBy, sortDir)
+	if err != nil {
+		log.Printf("Failed to get sorted files: %v", err)
+		// Return empty list if API fails
+		return []map[string]interface{}{}, nil
+	}
+	
+	return files, nil
+}
+
+func (a *App) GetRootDirectories() (map[string]interface{}, error) {
+	result, err := a.apiClient.GetRootDirectories()
+	if err != nil {
+		log.Printf("Failed to get root directories: %v", err)
+		return map[string]interface{}{}, nil
+	}
+	
+	return result, nil
+}
+
+func (a *App) GetDirectoryContents(path string) (map[string]interface{}, error) {
+	result, err := a.apiClient.GetDirectoryContents(path)
+	if err != nil {
+		log.Printf("Failed to get directory contents for %s: %v", path, err)
+		return map[string]interface{}{}, nil
+	}
+	
+	return result, nil
+}
+
 // ResetDatabase resets the database via the API
 func (a *App) ResetDatabase() error {
 	log.Println("Resetting database")
@@ -350,6 +409,50 @@ func (a *App) CallAPI(method, endpoint, body string) (string, error) {
 	response, err := a.apiClient.CallAPI(method, endpoint, body)
 	if err != nil {
 		log.Printf("Failed to call API: %v", err)
+		return "", err
+	}
+	
+	return response, nil
+}
+
+// GetCurrentLLMModel gets the current LLM model being used
+func (a *App) GetCurrentLLMModel() (string, error) {
+	model, err := a.apiClient.GetCurrentLLMModel()
+	if err != nil {
+		log.Printf("Failed to get current LLM model: %v", err)
+		return "unknown", err
+	}
+	
+	return model, nil
+}
+
+// GetLLMDebugInfo gets debug information from the last LLM query
+func (a *App) GetLLMDebugInfo() (*DebugInfo, error) {
+	debugInfo, err := a.apiClient.GetLLMDebugInfo()
+	if err != nil {
+		log.Printf("Failed to get LLM debug info: %v", err)
+		return nil, err
+	}
+	
+	return debugInfo, nil
+}
+
+// GetPrompt gets the current LLM prompt template
+func (a *App) GetPrompt() (string, error) {
+	prompt, err := a.apiClient.GetPrompt()
+	if err != nil {
+		log.Printf("Failed to get prompt: %v", err)
+		return "", err
+	}
+	
+	return prompt, nil
+}
+
+// UpdatePrompt updates the LLM prompt template
+func (a *App) UpdatePrompt(prompt string) (string, error) {
+	response, err := a.apiClient.UpdatePrompt(prompt)
+	if err != nil {
+		log.Printf("Failed to update prompt: %v", err)
 		return "", err
 	}
 	

@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,48 +16,67 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// UnstructuredExtractor handles extraction using the Unstructured service
 type UnstructuredExtractor struct {
-	pythonPath    string
-	venvPath      string
+	apiURL        string
 	timeout       time.Duration
 	log           *logrus.Logger
 	royalProcessor *RoyalDocumentProcessor
+	httpClient    *http.Client
 }
 
+// UnstructuredConfig represents configuration for the Unstructured service
 type UnstructuredConfig struct {
-	PythonPath string
-	VenvPath   string
+	APIURL     string
+	PythonPath string // Deprecated - kept for backward compatibility
+	VenvPath   string // Deprecated - kept for backward compatibility
 	Timeout    time.Duration
 }
 
+// UnstructuredResponse represents a response from the Unstructured service
 type UnstructuredResponse struct {
 	Content  string                 `json:"content"`
 	Metadata map[string]interface{} `json:"metadata"`
 	Error    string                 `json:"error,omitempty"`
 }
 
+// NewUnstructuredExtractor creates a new Unstructured extractor
 func NewUnstructuredExtractor(config UnstructuredConfig, logger *logrus.Logger) *UnstructuredExtractor {
 	if config.Timeout == 0 {
-		config.Timeout = 60 * time.Second
+		config.Timeout = 300 * time.Second // Default to 5 minutes for large files
+	}
+
+	// Default to local container API if not specified
+	if config.APIURL == "" {
+		// Check if UNSTRUCTURED_API_URL env var is set
+		if apiURL := os.Getenv("UNSTRUCTURED_API_URL"); apiURL != "" {
+			config.APIURL = apiURL
+		} else {
+			config.APIURL = "http://localhost:8001"
+		}
 	}
 
 	return &UnstructuredExtractor{
-		pythonPath:     config.PythonPath,
-		venvPath:       config.VenvPath,
+		apiURL:         config.APIURL,
 		timeout:        config.Timeout,
 		log:            logger,
-		royalProcessor: NewRoyalDocumentProcessor(config, logger),
+		royalProcessor: nil, // Disabled - using Unstructured API metadata directly
+		httpClient: &http.Client{
+			Timeout: config.Timeout,
+		},
 	}
 }
 
+// CanExtract checks if the file can be extracted by this extractor
 func (e *UnstructuredExtractor) CanExtract(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	return e.isSupported(ext)
 }
 
+// Extract extracts text content from the file
 func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*ExtractedContent, error) {
 	startTime := time.Now()
-	
+
 	e.log.WithFields(logrus.Fields{
 		"file":      filePath,
 		"extractor": "unstructured",
@@ -72,25 +93,14 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 		return nil, fmt.Errorf("unsupported file type: %s", ext)
 	}
 
-	// Create Python script content
-	script := e.createPythonScript()
+	// Create a timeout context to ensure the extraction doesn't hang
+	extractCtx, cancel := context.WithTimeout(ctx, e.timeout)
+	defer cancel()
 
-	// Create temporary script file
-	scriptFile, err := os.CreateTemp("", "unstructured_extract_*.py")
+	// Use HTTP API to extract content
+	response, err := e.extractViaAPI(extractCtx, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp script: %v", err)
-	}
-	defer os.Remove(scriptFile.Name())
-
-	if _, err := scriptFile.WriteString(script); err != nil {
-		return nil, fmt.Errorf("failed to write script: %v", err)
-	}
-	scriptFile.Close()
-
-	// Run the Python script
-	response, err := e.runPythonScript(scriptFile.Name(), filePath)
-	if err != nil {
-		return nil, fmt.Errorf("python extraction failed: %v", err)
+		return nil, fmt.Errorf("extraction failed: %v", err)
 	}
 
 	if response.Error != "" {
@@ -102,6 +112,8 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 		"file":     filePath,
 		"duration": duration,
 		"size":     len(response.Content),
+		"has_api_metadata": response.Metadata != nil && len(response.Metadata) > 0,
+		"api_metadata_count": len(response.Metadata),
 	}).Debug("Extraction completed")
 
 	// Try royal metadata extraction for supported files
@@ -110,7 +122,7 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 		if metadata, content, err := e.royalProcessor.ExtractRoyalMetadata(ctx, filePath); err == nil {
 			royalMetadata = FlattenRoyalMetadata(metadata)
 			e.log.WithField("file", filePath).Info("Royal metadata extracted successfully")
-			
+
 			// Use royal content if available and longer
 			if len(content.Text) > len(response.Content) {
 				response.Content = content.Text
@@ -134,6 +146,13 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 		finalMetadata["royal_extraction"] = true
 	}
 
+	e.log.WithFields(logrus.Fields{
+		"file": filePath,
+		"has_final_metadata": finalMetadata != nil && len(finalMetadata) > 0,
+		"final_metadata_count": len(finalMetadata),
+		"has_royal": royalMetadata != nil,
+	}).Debug("Returning extracted content with metadata")
+
 	return &ExtractedContent{
 		Text:     response.Content,
 		Metadata: finalMetadata,
@@ -141,140 +160,193 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 }
 
 func (e *UnstructuredExtractor) isSupported(ext string) bool {
-	// Only handle the formats we have confirmed dependencies for
-	// Let other extractors handle PDF, MD, JSON, etc.
+	// Handle all formats that Unstructured.io supports
 	supportedTypes := map[string]bool{
-		".docx": true,  // Office documents work well
-		".xlsx": true,  // Office documents work well  
-		".pptx": true,  // Office documents work well
-		".doc":  true,  // Older Office formats
-		".xls":  true,  // Older Office formats
-		".ppt":  true,  // Older Office formats
+		// Document Formats
+		".pdf":  true,  // PDF documents
+		".docx": true,  // Microsoft Word
+		".doc":  true,  // Microsoft Word (older)
+		".pptx": true,  // PowerPoint
+		".ppt":  true,  // PowerPoint (older)
+		".html": true,  // HTML files
+		".htm":  true,  // HTML files
+		".xml":  true,  // XML files
+		".md":   true,  // Markdown
+		".rtf":  true,  // Rich Text Format
+		".odt":  true,  // OpenDocument Text
+		".epub": true,  // EPUB books
+		".org":  true,  // Org-mode files
+		".rst":  true,  // reStructuredText
+
+		// Spreadsheet & Data Formats
+		".xlsx": true,  // Excel
+		".xls":  true,  // Excel (older)
+		".csv":  true,  // CSV files
+		".tsv":  true,  // TSV files
+		// ".json": false, // JSON files - removed, handled by text/code extractors
+
+		// Email Formats
+		".eml": true,  // Email files
+		".msg": true,  // Outlook messages
+
+		// Image Formats (with OCR)
+		".png":  true,  // PNG images
+		".jpg":  true,  // JPEG images
+		".jpeg": true,  // JPEG images
+		".tiff": true,  // TIFF images
+		".tif":  true,  // TIFF images
+		".bmp":  true,  // BMP images
+		".heic": true,  // HEIC images
+
+		// Plain Text
+		".txt": true,  // Text files
 	}
-	return supportedTypes[ext]
+
+	// Check both lowercase and uppercase extensions
+	return supportedTypes[strings.ToLower(ext)]
 }
 
-func (e *UnstructuredExtractor) createPythonScript() string {
-	return `#!/usr/bin/env python3
-import sys
-import json
-import traceback
-from pathlib import Path
-
-try:
-    from unstructured.partition.auto import partition
-    from unstructured.staging.base import convert_to_dict
-except ImportError as e:
-    print(json.dumps({"error": f"Failed to import unstructured: {e}"}))
-    sys.exit(1)
-
-def extract_document(file_path):
-    try:
-        # Use auto-partition to detect and process the document
-        elements = partition(
-            filename=file_path,
-            strategy="auto",
-            include_page_breaks=True,
-            infer_table_structure=True,
-            chunking_strategy="by_title",
-            max_characters=10000,
-            new_after_n_chars=3800,
-            combine_text_under_n_chars=2000,
-        )
-        
-        # Extract text content from all elements
-        content_parts = []
-        metadata = {
-            "num_elements": len(elements),
-            "element_types": {},
-            "page_count": 0,
-        }
-        
-        for element in elements:
-            if hasattr(element, 'text') and element.text.strip():
-                content_parts.append(element.text.strip())
-            
-            # Count element types
-            element_type = type(element).__name__
-            metadata["element_types"][element_type] = metadata["element_types"].get(element_type, 0) + 1
-            
-            # Track page numbers if available
-            if hasattr(element, 'metadata') and element.metadata:
-                if hasattr(element.metadata, 'page_number') and element.metadata.page_number:
-                    metadata["page_count"] = max(metadata["page_count"], element.metadata.page_number)
-        
-        content = '\n\n'.join(content_parts)
-        
-        return {
-            "content": content,
-            "metadata": metadata
-        }
-        
-    except Exception as e:
-        return {
-            "error": f"Extraction failed: {str(e)}",
-            "traceback": traceback.format_exc()
-        }
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(json.dumps({"error": "Usage: script.py <file_path>"}))
-        sys.exit(1)
-    
-    file_path = sys.argv[1]
-    result = extract_document(file_path)
-    print(json.dumps(result, ensure_ascii=False, indent=None))
-`
-}
-
-func (e *UnstructuredExtractor) runPythonScript(scriptPath, filePath string) (*UnstructuredResponse, error) {
-	var cmd *exec.Cmd
-	
-	if e.venvPath != "" {
-		// Use virtual environment python
-		pythonBin := filepath.Join(e.venvPath, "bin", "python")
-		cmd = exec.Command(pythonBin, scriptPath, filePath)
-	} else if e.pythonPath != "" {
-		// Use specified python path
-		cmd = exec.Command(e.pythonPath, scriptPath, filePath)
-	} else {
-		// Use system python3
-		cmd = exec.Command("python3", scriptPath, filePath)
+// extractViaAPI extracts text content using the Unstructured HTTP API
+func (e *UnstructuredExtractor) extractViaAPI(ctx context.Context, filePath string) (*UnstructuredResponse, error) {
+	// Check context before starting
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("context cancelled before extraction: %v", ctx.Err())
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// Set timeout
-	if e.timeout > 0 {
-		go func() {
-			time.Sleep(e.timeout)
-			if cmd.Process != nil {
-				cmd.Process.Kill()
-			}
-		}()
-	}
-
-	err := cmd.Run()
+	// Read the file with size check
+	fileInfo, err := os.Stat(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("command failed: %v, stderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("failed to stat file: %v", err)
 	}
 
-	var response UnstructuredResponse
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %v, output: %s", err, stdout.String())
+	// Skip very large files that might cause issues
+	maxSize := int64(100 * 1024 * 1024) // 100MB limit for Unstructured
+	if fileInfo.Size() > maxSize {
+		return nil, fmt.Errorf("file too large for Unstructured extraction: %d bytes (max: %d)", fileInfo.Size(), maxSize)
 	}
 
-	return &response, nil
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %v", err)
+	}
+
+	// Create multipart form data
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Add file field
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create form file: %v", err)
+	}
+
+	if _, err := part.Write(fileData); err != nil {
+		return nil, fmt.Errorf("failed to write file data: %v", err)
+	}
+
+	// Add parameters for maximum metadata extraction
+	writer.WriteField("strategy", "hi_res") // High resolution for maximum detail
+	writer.WriteField("include_metadata", "true")
+	// coordinates parameter removed - causes conflicts with internal implementation
+	writer.WriteField("extract_images", "false") // Disabled to avoid errors
+	writer.WriteField("infer_table_structure", "true")
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %v", err)
+	}
+
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, "POST", e.apiURL+"/extract", &buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	// Send request with timeout handling
+	type result struct {
+		resp *http.Response
+		err  error
+	}
+	respChan := make(chan result, 1)
+
+	go func() {
+		resp, err := e.httpClient.Do(req)
+		respChan <- result{resp, err}
+	}()
+
+	var resp *http.Response
+	select {
+	case <-ctx.Done():
+		// Context cancelled or timed out
+		e.log.WithFields(logrus.Fields{
+			"file":    filePath,
+			"timeout": e.timeout,
+		}).Warn("Unstructured extraction timed out")
+		return nil, fmt.Errorf("extraction timed out after %v", e.timeout)
+	case res := <-respChan:
+		if res.err != nil {
+			return nil, fmt.Errorf("failed to send request: %v", res.err)
+		}
+		resp = res.resp
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status before reading body
+	if resp.StatusCode != http.StatusOK {
+		// Try to read error message from body
+		errorBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(errorBody))
+	}
+
+	// Read response with size limit to prevent memory issues
+	maxResponseSize := int64(50 * 1024 * 1024) // 50MB max response
+	limitedReader := io.LimitReader(resp.Body, maxResponseSize)
+	body, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	// Parse response
+	var apiResponse struct {
+		Success bool                   `json:"success"`
+		Content string                 `json:"content"`
+		Metadata map[string]interface{} `json:"metadata"`
+		Error   string                 `json:"error,omitempty"`
+	}
+
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v, body: %s", err, string(body))
+	}
+
+	if !apiResponse.Success {
+		return nil, fmt.Errorf("API extraction failed: %s", apiResponse.Error)
+	}
+
+	return &UnstructuredResponse{
+		Content:  apiResponse.Content,
+		Metadata: apiResponse.Metadata,
+	}, nil
 }
 
+// GetSupportedExtensions returns the list of supported file extensions
 func (e *UnstructuredExtractor) GetSupportedExtensions() []string {
 	return []string{
-		".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt",
+		// Document Formats
+		".pdf", ".docx", ".doc", ".pptx", ".ppt", ".html", ".htm",
+		".xml", ".md", ".rtf", ".odt", ".epub", ".org", ".rst",
+		// Spreadsheet & Data Formats
+		".xlsx", ".xls", ".csv", ".tsv", // Removed .json - handled by text/code extractors
+		// Email Formats
+		".eml", ".msg",
+		// Image Formats (with OCR)
+		".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".heic",
+		// Plain Text
+		".txt",
 	}
 }
 
+// GetName returns the name of the extractor
 func (e *UnstructuredExtractor) GetName() string {
 	return "UnstructuredExtractor"
 }

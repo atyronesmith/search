@@ -91,6 +91,19 @@ ollama pull qwen3:4b # Download LLM model for query enhancement (auto-pulled if 
 
 ## Development Guidelines
 
+### Code Quality Requirements
+
+**⚠️ IMPORTANT: ALL GO CODE MUST PASS GOLINT WITHOUT ERRORS! ⚠️**
+
+All Go code in this repository must:
+- Pass `golint` checks without any errors
+- Have proper documentation comments on all exported types, functions, and methods
+- Follow Go naming conventions (avoid stuttering type names)
+- Include justification comments for blank imports
+- Use idiomatic Go patterns (simplify if-else blocks where appropriate)
+
+Run `golint ./...` before committing any Go code changes. Fix all reported issues.
+
 ### Adding New API Methods
 When adding methods to the desktop app:
 1. Add method to `app.go` (Go backend)
@@ -284,3 +297,4 @@ podman exec file-search-db psql -U postgres -d file_search -c "SELECT SUBSTRING(
 - Combined: < 5000 files total
 
 **If you see more than 10,000 files, the system is broken and needs immediate attention.**
+- all go code must pass golint

@@ -377,9 +377,9 @@ func defaultSynonyms() map[string][]string {
 	}
 }
 
-// BuildSearchRequest converts a processed query to a search request
-func (qp *QueryProcessor) BuildSearchRequest(pq *ProcessedQuery) *SearchRequest {
-	req := &SearchRequest{
+// BuildRequest converts a processed query to a search request
+func (qp *QueryProcessor) BuildRequest(pq *ProcessedQuery) *Request {
+	req := &Request{
 		Query: pq.Cleaned,
 	}
 	

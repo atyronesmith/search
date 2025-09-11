@@ -16,16 +16,17 @@ import (
 )
 
 var (
+	// ErrFileTooLarge indicates that the file exceeds the maximum size limit
 	ErrFileTooLarge = errors.New("file too large to process")
 )
 
 // TextExtractor handles plain text files
 type TextExtractor struct {
-	config *ExtractorConfig
+	config *Config
 }
 
 // NewTextExtractor creates a new text extractor
-func NewTextExtractor(config *ExtractorConfig) *TextExtractor {
+func NewTextExtractor(config *Config) *TextExtractor {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -38,24 +39,24 @@ func (e *TextExtractor) CanExtract(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	doclingExtensions := map[string]bool{
 		".md":   true, // Markdown - better handled by Docling
-		".html": true, // HTML - better handled by Docling  
+		".html": true, // HTML - better handled by Docling
 		".htm":  true, // HTML - better handled by Docling
 	}
-	
+
 	if doclingExtensions[ext] {
 		return false
 	}
-	
+
 	// First check if it's a known binary file
 	if IsBinaryFile(filePath) {
 		return false
 	}
-	
+
 	// Check if it's a known text file
 	if IsTextFile(filePath) {
 		return true
 	}
-	
+
 	// For unknown extensions, check encoding
 	return HasValidEncoding(filePath)
 }
@@ -144,7 +145,9 @@ func (e *TextExtractor) readWithEncoding(file *os.File) (string, string, error) 
 	}
 
 	// Reset file position
-	file.Seek(0, 0)
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", "", err
+	}
 
 	// Detect encoding
 	encoding := "utf-8"
@@ -160,12 +163,16 @@ func (e *TextExtractor) readWithEncoding(file *os.File) (string, string, error) 
 		}
 
 		for _, enc := range encodings {
-			file.Seek(0, 0)
+			if _, err := file.Seek(0, 0); err != nil {
+				return "", "", err
+			}
 			reader := transform.NewReader(file, enc.dec)
 			decoded := make([]byte, 1024)
 			if n, err := reader.Read(decoded); err == nil && utf8.Valid(decoded[:n]) {
 				encoding = enc.name
-				file.Seek(0, 0)
+				if _, err := file.Seek(0, 0); err != nil {
+					return "", "", err
+				}
 				reader = transform.NewReader(file, enc.dec)
 				content, err := io.ReadAll(reader)
 				return string(content), encoding, err
@@ -174,15 +181,17 @@ func (e *TextExtractor) readWithEncoding(file *os.File) (string, string, error) 
 	}
 
 	// Default to UTF-8
-	file.Seek(0, 0)
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", "", err
+	}
 	content, err := io.ReadAll(file)
 	return string(content), encoding, err
 }
 
 // detectTextType detects the type of text file
-func (e *TextExtractor) detectTextType(filePath, content string) string {
+func (e *TextExtractor) detectTextType(filePath, _ string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	switch ext {
 	case ".md":
 		return "markdown"
@@ -208,7 +217,7 @@ func (e *TextExtractor) detectTextType(filePath, content string) string {
 // parseStructuredContent parses content into sections based on file type
 func (e *TextExtractor) parseStructuredContent(filePath, content string) []SectionContent {
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	switch ext {
 	case ".md":
 		return e.parseMarkdown(content)
@@ -223,13 +232,13 @@ func (e *TextExtractor) parseStructuredContent(filePath, content string) []Secti
 func (e *TextExtractor) parseMarkdown(content string) []SectionContent {
 	var sections []SectionContent
 	lines := strings.Split(content, "\n")
-	
+
 	var currentSection SectionContent
 	var sectionLines []string
-	
+
 	for _, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
-		
+
 		// Check for headings
 		if strings.HasPrefix(trimmedLine, "#") {
 			// Save previous section
@@ -237,7 +246,7 @@ func (e *TextExtractor) parseMarkdown(content string) []SectionContent {
 				currentSection.Text = strings.Join(sectionLines, "\n")
 				sections = append(sections, currentSection)
 			}
-			
+
 			// Start new section
 			level := 0
 			for i, r := range trimmedLine {
@@ -267,7 +276,7 @@ func (e *TextExtractor) parseMarkdown(content string) []SectionContent {
 					currentSection.Text = strings.Join(sectionLines, "\n")
 					sections = append(sections, currentSection)
 				}
-				
+
 				language := strings.TrimSpace(strings.TrimPrefix(trimmedLine, "```"))
 				currentSection = SectionContent{
 					Type:     "code",
@@ -279,7 +288,7 @@ func (e *TextExtractor) parseMarkdown(content string) []SectionContent {
 			sectionLines = append(sectionLines, line)
 		}
 	}
-	
+
 	// Save last section
 	if currentSection.Type != "" || len(sectionLines) > 0 {
 		if currentSection.Type == "" {
@@ -288,31 +297,31 @@ func (e *TextExtractor) parseMarkdown(content string) []SectionContent {
 		currentSection.Text = strings.Join(sectionLines, "\n")
 		sections = append(sections, currentSection)
 	}
-	
+
 	return sections
 }
 
 // parseTabular parses CSV/TSV content
 func (e *TextExtractor) parseTabular(content, ext string) []SectionContent {
 	// TODO: Implement proper CSV/TSV parsing with separator
-	
+
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 {
 		return nil
 	}
-	
+
 	// First line as header
 	header := SectionContent{
 		Type: "table_header",
 		Text: lines[0],
 	}
-	
+
 	// Rest as table body
 	body := SectionContent{
 		Type: "table",
 		Text: strings.Join(lines[1:], "\n"),
 	}
-	
+
 	return []SectionContent{header, body}
 }
 
@@ -320,7 +329,7 @@ func (e *TextExtractor) parseTabular(content, ext string) []SectionContent {
 func (e *TextExtractor) parsePlainText(content string) []SectionContent {
 	paragraphs := strings.Split(content, "\n\n")
 	sections := make([]SectionContent, 0, len(paragraphs))
-	
+
 	for _, paragraph := range paragraphs {
 		if strings.TrimSpace(paragraph) != "" {
 			sections = append(sections, SectionContent{
@@ -329,7 +338,7 @@ func (e *TextExtractor) parsePlainText(content string) []SectionContent {
 			})
 		}
 	}
-	
+
 	return sections
 }
 
