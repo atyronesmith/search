@@ -30,7 +30,7 @@ func (c *SemanticChunker) SupportsFileType(fileType string) bool {
 }
 
 // Chunk chunks content based on semantic structure
-func (c *SemanticChunker) Chunk(content *extractor.ExtractedContent, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SemanticChunker) Chunk(content *extractor.ExtractedContent, config *Config) ([]Chunk, error) {
 	// If structured content is available, use it
 	if len(content.Sections) > 0 {
 		return c.chunkBySections(content.Sections, config)
@@ -46,7 +46,7 @@ func (c *SemanticChunker) Chunk(content *extractor.ExtractedContent, config *Chu
 }
 
 // chunkBySections chunks content using extracted sections
-func (c *SemanticChunker) chunkBySections(sections []extractor.SectionContent, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SemanticChunker) chunkBySections(sections []extractor.SectionContent, config *Config) ([]Chunk, error) {
 	var chunks []Chunk
 	currentChunk := strings.Builder{}
 	currentSections := []extractor.SectionContent{}
@@ -112,7 +112,7 @@ func (c *SemanticChunker) chunkBySections(sections []extractor.SectionContent, c
 }
 
 // chunkByPages chunks content by pages (for PDFs)
-func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *Config) ([]Chunk, error) {
 	var chunks []Chunk
 	currentChunk := strings.Builder{}
 	currentPages := []int{}
@@ -172,7 +172,7 @@ func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *Ch
 }
 
 // chunkByParagraphs chunks content by paragraphs
-func (c *SemanticChunker) chunkByParagraphs(text string, config *ChunkerConfig) ([]Chunk, error) {
+func (c *SemanticChunker) chunkByParagraphs(text string, config *Config) ([]Chunk, error) {
 	paragraphs := splitIntoParagraphs(text)
 	var chunks []Chunk
 	currentChunk := strings.Builder{}
@@ -251,7 +251,7 @@ func (c *SemanticChunker) finalizeChunk(content string, index int, sections []ex
 }
 
 // splitLargeSection splits a section that's too large into smaller chunks
-func (c *SemanticChunker) splitLargeSection(text string, startIndex int, config *ChunkerConfig) []Chunk {
+func (c *SemanticChunker) splitLargeSection(text string, startIndex int, config *Config) []Chunk {
 	// Use sentence-based splitting for large sections
 	sentences := splitIntoSentences(text)
 	var chunks []Chunk

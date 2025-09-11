@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
+// DB represents a database connection
 type DB struct {
 	conn *sql.DB
 }
 
+// New creates a new database connection
 func New(connectionString string) (*DB, error) {
 	conn, err := sql.Open("postgres", connectionString)
 	if err != nil {
@@ -38,10 +40,12 @@ func New(connectionString string) (*DB, error) {
 	return &DB{conn: conn}, nil
 }
 
+// Close closes the database connection
 func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
+// InitSchema initializes the database schema
 func (db *DB) InitSchema() error {
 	ctx := context.Background()
 	
@@ -61,24 +65,76 @@ func (db *DB) InitSchema() error {
 	return tx.Commit()
 }
 
+// BeginTx begins a database transaction
 func (db *DB) BeginTx(ctx context.Context) (*sql.Tx, error) {
 	return db.conn.BeginTx(ctx, nil)
 }
 
+// Query executes a query that returns rows
 func (db *DB) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return db.conn.QueryContext(ctx, query, args...)
 }
 
+// QueryRow executes a query that returns a single row
 func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return db.conn.QueryRowContext(ctx, query, args...)
 }
 
+// Exec executes a query without returning any rows
 func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return db.conn.ExecContext(ctx, query, args...)
 }
 
+// Ping verifies the database connection is alive
 func (db *DB) Ping(ctx context.Context) error {
 	return db.conn.PingContext(ctx)
+}
+
+// GetFailedFiles returns a list of file paths that have failed or were skipped during indexing
+func (db *DB) GetFailedFiles(ctx context.Context) ([]string, error) {
+	query := `SELECT path FROM files WHERE indexing_status IN ('failed', 'skipped')`
+	
+	rows, err := db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query failed files: %v", err)
+	}
+	defer rows.Close()
+	
+	var failedFiles []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, fmt.Errorf("failed to scan failed file path: %v", err)
+		}
+		failedFiles = append(failedFiles, path)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error reading failed files: %v", err)
+	}
+	
+	return failedFiles, nil
+}
+
+// ResetFileStatus resets a file's indexing status from 'failed' or 'skipped' to 'pending'
+func (db *DB) ResetFileStatus(ctx context.Context, filePath string) error {
+	query := `UPDATE files SET indexing_status = 'pending', last_indexed = NULL WHERE path = $1 AND indexing_status IN ('failed', 'skipped')`
+	
+	result, err := db.Exec(ctx, query, filePath)
+	if err != nil {
+		return fmt.Errorf("failed to reset file status: %v", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %v", err)
+	}
+	
+	if rowsAffected == 0 {
+		return fmt.Errorf("no failed file found with path: %s", filePath)
+	}
+	
+	return nil
 }
 
 func getSchemaSQL() string {
@@ -91,11 +147,16 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 DROP TABLE IF EXISTS search_cache CASCADE;
 DROP TABLE IF EXISTS file_changes CASCADE;
 DROP TABLE IF EXISTS text_search CASCADE;
+DROP TABLE IF EXISTS file_entities CASCADE;
+DROP TABLE IF EXISTS file_classification_scores CASCADE;
 DROP TABLE IF EXISTS chunks CASCADE;
 DROP TABLE IF EXISTS files CASCADE;
 DROP TABLE IF EXISTS indexing_rules CASCADE;
 DROP TABLE IF EXISTS indexing_stats CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS document_hierarchy CASCADE;
+DROP VIEW IF EXISTS files_with_entities CASCADE;
+DROP VIEW IF EXISTS document_type_distribution CASCADE;
+DROP VIEW IF EXISTS entity_type_distribution CASCADE;
 
 -- File hierarchy and metadata
 CREATE TABLE files (
@@ -112,7 +173,33 @@ CREATE TABLE files (
     content_hash TEXT,
     indexing_status TEXT DEFAULT 'pending' CHECK (indexing_status IN ('pending', 'processing', 'completed', 'error', 'skipped')),
     error_message TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+    -- NLP fields
+    document_type VARCHAR(50),
+    document_confidence FLOAT,
+    nlp_processed_at TIMESTAMPTZ
+);
+
+-- NLP Entity extraction table
+CREATE TABLE file_entities (
+    id BIGSERIAL PRIMARY KEY,
+    file_id BIGINT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    entity_text TEXT NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    confidence FLOAT NOT NULL,
+    start_position INT,
+    end_position INT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- NLP Document classification scores
+CREATE TABLE file_classification_scores (
+    id BIGSERIAL PRIMARY KEY,
+    file_id BIGINT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    classification_type VARCHAR(50) NOT NULL,
+    score FLOAT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(file_id, classification_type)
 );
 
 -- Document chunks with embeddings
@@ -128,6 +215,9 @@ CREATE TABLE chunks (
     char_end INTEGER NOT NULL,
     chunk_type TEXT CHECK (chunk_type IN ('semantic', 'code', 'table', 'list', 'sliding')),
     metadata JSONB DEFAULT '{}'::jsonb,
+    -- NLP fields
+    entities JSONB,
+    semantic_category VARCHAR(50),
     UNIQUE(file_id, chunk_index)
 );
 
@@ -215,6 +305,14 @@ CREATE INDEX idx_file_changes_detected ON file_changes(detected_at DESC);
 CREATE INDEX idx_search_cache_query ON search_cache(query_hash);
 CREATE INDEX idx_search_cache_accessed ON search_cache(last_accessed DESC);
 
+-- NLP indexes
+CREATE INDEX idx_file_entities_file_id ON file_entities(file_id);
+CREATE INDEX idx_file_entities_type ON file_entities(entity_type);
+CREATE INDEX idx_file_entities_confidence ON file_entities(confidence);
+CREATE INDEX idx_file_classification_file_id ON file_classification_scores(file_id);
+CREATE INDEX idx_file_classification_type ON file_classification_scores(classification_type);
+CREATE INDEX idx_chunks_entities ON chunks USING GIN (entities);
+
 -- Functions
 CREATE OR REPLACE FUNCTION update_parent_path() RETURNS TRIGGER AS $$
 BEGIN
@@ -252,5 +350,42 @@ INSERT INTO indexing_rules (path_pattern, priority, file_patterns, exclude_patte
     ('~/Downloads', 3, ARRAY['*.pdf', '*.docx', '*.doc', '*.txt'], ARRAY['~*', '.*', '*.tmp']);
 
 INSERT INTO indexing_stats (total_files, indexed_files) VALUES (0, 0);
+
+-- NLP Views
+CREATE OR REPLACE VIEW files_with_entities AS
+SELECT 
+    f.id,
+    f.path,
+    f.file_type,
+    f.document_type,
+    f.document_confidence,
+    COUNT(DISTINCT fe.id) as entity_count,
+    ARRAY_AGG(DISTINCT fe.entity_type) as entity_types,
+    MAX(fe.confidence) as max_entity_confidence
+FROM files f
+LEFT JOIN file_entities fe ON f.id = fe.file_id
+GROUP BY f.id, f.path, f.file_type, f.document_type, f.document_confidence;
+
+CREATE OR REPLACE VIEW document_type_distribution AS
+SELECT 
+    document_type,
+    COUNT(*) as file_count,
+    AVG(document_confidence) as avg_confidence,
+    MIN(document_confidence) as min_confidence,
+    MAX(document_confidence) as max_confidence
+FROM files
+WHERE document_type IS NOT NULL
+GROUP BY document_type
+ORDER BY file_count DESC;
+
+CREATE OR REPLACE VIEW entity_type_distribution AS
+SELECT 
+    entity_type,
+    COUNT(*) as entity_count,
+    COUNT(DISTINCT file_id) as file_count,
+    AVG(confidence) as avg_confidence
+FROM file_entities
+GROUP BY entity_type
+ORDER BY entity_count DESC;
 `
 }

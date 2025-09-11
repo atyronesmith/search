@@ -62,7 +62,35 @@ func (s *Server) getFiles(req *FileListRequest) ([]database.File, int64, error) 
 	}
 	
 	// Add ordering and pagination
-	queryBuilder.WriteString(" ORDER BY modified_at DESC")
+	// Map frontend column names to database column names
+	columnMap := map[string]string{
+		"filename":        "filename",
+		"file_type":       "file_type",
+		"indexing_status": "indexing_status",
+		"size_bytes":      "size_bytes",
+		"modified_at":     "modified_at",
+	}
+	
+	// Determine sort column (default to filename if not specified or invalid)
+	sortColumn := "filename"
+	if req.SortBy != "" {
+		if col, ok := columnMap[req.SortBy]; ok {
+			sortColumn = col
+		}
+	}
+	
+	// Determine sort direction (default to ASC for filename, DESC for others)
+	sortDir := "ASC"
+	if req.SortDir != "" {
+		if strings.ToLower(req.SortDir) == "desc" {
+			sortDir = "DESC"
+		}
+	} else if sortColumn == "modified_at" {
+		// Default to DESC for modified_at only if no direction specified
+		sortDir = "DESC"
+	}
+	
+	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY %s %s", sortColumn, sortDir))
 	queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1))
 	args = append(args, req.Limit, req.Offset)
 	
@@ -289,6 +317,29 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 	var processingFiles int64
 	s.db.QueryRow(ctx, processingQuery).Scan(&processingFiles)
 	
+	// Get actual file counts from database (more accurate than indexing_stats table)
+	actualCountsQuery := `
+		SELECT 
+			COUNT(*) as total,
+			COUNT(CASE WHEN indexing_status = 'completed' THEN 1 END) as completed,
+			COUNT(CASE WHEN indexing_status = 'failed' THEN 1 END) as failed,
+			COUNT(CASE WHEN indexing_status = 'skipped' THEN 1 END) as skipped
+		FROM files`
+	var actualTotal, actualCompleted, actualFailed, actualSkipped int64
+	err = s.db.QueryRow(ctx, actualCountsQuery).Scan(&actualTotal, &actualCompleted, &actualFailed, &actualSkipped)
+	if err != nil {
+		s.log.WithError(err).Warn("Failed to get actual file counts, using indexing_stats")
+		actualTotal = stats.TotalFiles
+		actualCompleted = stats.IndexedFiles
+		actualFailed = stats.FailedFiles
+		actualSkipped = 0
+	}
+	
+	// Use actual counts instead of potentially stale indexing_stats
+	stats.TotalFiles = actualTotal
+	stats.IndexedFiles = actualCompleted
+	stats.FailedFiles = actualFailed // Keep failed separate
+	
 	// Get recent activity
 	recentQuery := `
 		SELECT COUNT(*) 
@@ -297,6 +348,37 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 	`
 	var recentlyIndexed int64
 	s.db.QueryRow(ctx, recentQuery).Scan(&recentlyIndexed)
+	
+	// Get file type breakdown for successfully indexed files
+	fileTypeQuery := `
+		SELECT 
+			LOWER(extension) as ext,
+			COUNT(*) as count
+		FROM files
+		WHERE indexing_status = 'completed' AND extension IS NOT NULL
+		GROUP BY LOWER(extension)
+		ORDER BY count DESC
+		LIMIT 20
+	`
+	
+	fileTypeBreakdown := []map[string]interface{}{}
+	ftRows, err := s.db.Query(ctx, fileTypeQuery)
+	if err == nil {
+		defer ftRows.Close()
+		for ftRows.Next() {
+			var ext string
+			var count int64
+			if err := ftRows.Scan(&ext, &count); err == nil {
+				// Map extensions to readable file types
+				fileType := getFileTypeFromExtension(ext)
+				fileTypeBreakdown = append(fileTypeBreakdown, map[string]interface{}{
+					"extension": ext,
+					"type":      fileType,
+					"count":     count,
+				})
+			}
+		}
+	}
 	
 	// Get database disk usage
 	dbSizeQuery := `
@@ -333,7 +415,8 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"total_files":       stats.TotalFiles,
 		"indexed_files":     stats.IndexedFiles,
-		"failed_files":      stats.FailedFiles,
+		"failed_files":      actualFailed,     // Explicitly use actualFailed
+		"skipped_files":     actualSkipped,    // Add separate skipped count
 		"pending_files":     pendingFiles,
 		"processing_files":  processingFiles,
 		"total_chunks":      stats.TotalChunks,
@@ -351,7 +434,88 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 			"chunks_table_size_bytes": chunksTableSizeBytes,
 			"text_search_table_size_bytes": textSearchTableSizeBytes,
 		},
+		"file_type_breakdown": fileTypeBreakdown, // Add file type statistics
 	}, nil
+}
+
+// getFileTypeFromExtension maps file extensions to readable file type categories
+func getFileTypeFromExtension(ext string) string {
+	// Remove leading dot if present
+	ext = strings.TrimPrefix(ext, ".")
+	ext = strings.ToLower(ext)
+	
+	switch ext {
+	// Documents
+	case "pdf":
+		return "PDF Document"
+	case "doc", "docx":
+		return "Word Document"
+	case "xls", "xlsx":
+		return "Spreadsheet"
+	case "ppt", "pptx":
+		return "Presentation"
+	case "txt":
+		return "Text File"
+	case "rtf":
+		return "Rich Text"
+	case "md", "markdown":
+		return "Markdown"
+		
+	// Code files
+	case "go":
+		return "Go Source"
+	case "js", "javascript":
+		return "JavaScript"
+	case "ts", "tsx":
+		return "TypeScript"
+	case "py":
+		return "Python"
+	case "java":
+		return "Java"
+	case "c", "cpp", "cc", "h", "hpp":
+		return "C/C++"
+	case "cs":
+		return "C#"
+	case "rb":
+		return "Ruby"
+	case "php":
+		return "PHP"
+	case "swift":
+		return "Swift"
+	case "rs":
+		return "Rust"
+	case "kt":
+		return "Kotlin"
+		
+	// Web files
+	case "html", "htm":
+		return "HTML"
+	case "css", "scss", "sass":
+		return "Stylesheet"
+	case "json":
+		return "JSON"
+	case "xml":
+		return "XML"
+	case "yaml", "yml":
+		return "YAML"
+		
+	// Data files
+	case "csv":
+		return "CSV Data"
+	case "sql":
+		return "SQL Script"
+		
+	// Image files (if we index metadata)
+	case "jpg", "jpeg", "png", "gif", "bmp", "svg":
+		return "Image"
+		
+	default:
+		// Capitalize first letter and add "File"
+		if len(ext) > 0 {
+			return strings.ToUpper(string(ext[0])) + strings.ToLower(ext[1:]) + " File"
+		}
+		return "Other"
+	}
 }
 
 // getSystemStatus retrieves comprehensive system status
@@ -384,20 +548,34 @@ func (s *Server) getSystemStatus() (*SystemStatus, error) {
 			databaseSize = totalSizeBytes
 		}
 	}
+	
+	// Extract file type breakdown from stats
+	var fileTypeBreakdown []map[string]interface{}
+	if ftBreakdown, ok := stats["file_type_breakdown"].([]map[string]interface{}); ok {
+		fileTypeBreakdown = ftBreakdown
+	}
+	
+	// Extract skipped files count
+	var skippedFiles int64 = 0
+	if skipped, ok := stats["skipped_files"].(int64); ok {
+		skippedFiles = skipped
+	}
 
 	status := &SystemStatus{
-		Version:          "1.0.0",
-		Uptime:           time.Since(s.service.GetStartTime()),
-		IndexingActive:   indexingStatus["active"].(bool),
-		IndexingPaused:   indexingStatus["paused"].(bool),
-		TotalFiles:       stats["total_files"].(int64),
-		IndexedFiles:     stats["indexed_files"].(int64),
-		PendingFiles:     stats["pending_files"].(int64),
-		FailedFiles:      stats["failed_files"].(int64),
-		DatabaseSize:     databaseSize,
-		DatabaseSizeInfo: databaseSizeInfo,
-		CacheSize:        cacheStats.Size,
-		ResourceUsage:    resourceUsage,
+		Version:           "1.0.0",
+		Uptime:            time.Since(s.service.GetStartTime()),
+		IndexingActive:    indexingStatus["active"].(bool),
+		IndexingPaused:    indexingStatus["paused"].(bool),
+		TotalFiles:        stats["total_files"].(int64),
+		IndexedFiles:      stats["indexed_files"].(int64),
+		PendingFiles:      stats["pending_files"].(int64),
+		FailedFiles:       stats["failed_files"].(int64),
+		SkippedFiles:      skippedFiles,
+		DatabaseSize:      databaseSize,
+		DatabaseSizeInfo:  databaseSizeInfo,
+		FileTypeBreakdown: fileTypeBreakdown,
+		CacheSize:         cacheStats.Size,
+		ResourceUsage:     resourceUsage,
 	}
 	
 	return status, nil

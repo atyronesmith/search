@@ -51,25 +51,25 @@ type Extractor interface {
 	GetSupportedExtensions() []string
 }
 
-// ExtractorManager manages multiple extractors
-type ExtractorManager struct {
+// Manager manages multiple extractors
+type Manager struct {
 	extractors []Extractor
 }
 
-// NewExtractorManager creates a new extractor manager
-func NewExtractorManager() *ExtractorManager {
-	return &ExtractorManager{
+// NewManager creates a new extractor manager
+func NewManager() *Manager {
+	return &Manager{
 		extractors: make([]Extractor, 0),
 	}
 }
 
 // AddExtractor adds an extractor to the manager
-func (em *ExtractorManager) AddExtractor(extractor Extractor) {
+func (em *Manager) AddExtractor(extractor Extractor) {
 	em.extractors = append(em.extractors, extractor)
 }
 
 // Extract finds an appropriate extractor and extracts content
-func (em *ExtractorManager) Extract(ctx context.Context, filePath string) (*ExtractedContent, error) {
+func (em *Manager) Extract(ctx context.Context, filePath string) (*ExtractedContent, error) {
 	for _, extractor := range em.extractors {
 		if extractor.CanExtract(filePath) {
 			return extractor.Extract(ctx, filePath)
@@ -80,7 +80,7 @@ func (em *ExtractorManager) Extract(ctx context.Context, filePath string) (*Extr
 }
 
 // GetExtractorForFile returns the extractor that can handle a file
-func (em *ExtractorManager) GetExtractorForFile(filePath string) Extractor {
+func (em *Manager) GetExtractorForFile(filePath string) Extractor {
 	for _, extractor := range em.extractors {
 		if extractor.CanExtract(filePath) {
 			return extractor
@@ -90,12 +90,12 @@ func (em *ExtractorManager) GetExtractorForFile(filePath string) Extractor {
 }
 
 // ListExtractors returns all available extractors
-func (em *ExtractorManager) ListExtractors() []Extractor {
+func (em *Manager) ListExtractors() []Extractor {
 	return em.extractors
 }
 
 // GetSupportedExtensions returns all supported file extensions
-func (em *ExtractorManager) GetSupportedExtensions() []string {
+func (em *Manager) GetSupportedExtensions() []string {
 	extensionSet := make(map[string]bool)
 	
 	for _, extractor := range em.extractors {
@@ -112,8 +112,8 @@ func (em *ExtractorManager) GetSupportedExtensions() []string {
 	return extensions
 }
 
-// ExtractorConfig holds configuration for extractors
-type ExtractorConfig struct {
+// Config holds configuration for extractors
+type Config struct {
 	MaxFileSizeMB   int               `json:"max_file_size_mb"`
 	Timeout         int               `json:"timeout_seconds"`
 	TempDir         string            `json:"temp_dir"`
@@ -121,8 +121,8 @@ type ExtractorConfig struct {
 }
 
 // DefaultConfig returns default extractor configuration
-func DefaultConfig() *ExtractorConfig {
-	return &ExtractorConfig{
+func DefaultConfig() *Config {
+	return &Config{
 		MaxFileSizeMB: 100,
 		Timeout:       60,
 		TempDir:       "/tmp",

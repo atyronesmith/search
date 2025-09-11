@@ -251,14 +251,13 @@ func (rl *RateLimiter) calculateAdaptiveFactor() float64 {
 			newFactor = 0.1 // Don't go below 10% of original rate
 		}
 		return newFactor
-	} else {
-		// Gradually increase rate when not under pressure
-		newFactor := rl.currentFactor * rl.config.RecoveryFactor
-		if newFactor > 1.0 {
-			newFactor = 1.0 // Don't exceed original rate
-		}
-		return newFactor
 	}
+	// Gradually increase rate when not under pressure
+	newFactor := rl.currentFactor * rl.config.RecoveryFactor
+	if newFactor > 1.0 {
+		newFactor = 1.0 // Don't exceed original rate
+	}
+	return newFactor
 }
 
 // calculateTimeFactor calculates the time-based rate factor

@@ -396,6 +396,37 @@ dev-all: ## Start all services in development mode
 .PHONY: restart-all
 restart-all: stop-all run-all ## Restart all services
 
+.PHONY: restart-dev
+restart-dev: ## Restart backend and frontend to pick up code changes
+	@echo "$(BLUE)Restarting development services...$(RESET)"
+	@echo "$(YELLOW)Stopping backend and frontend...$(RESET)"
+	@# Stop backend process
+	@if [ -f /tmp/file-search-backend.pid ]; then \
+		kill $$(cat /tmp/file-search-backend.pid) 2>/dev/null || true; \
+		rm -f /tmp/file-search-backend.pid; \
+	fi
+	@pkill -f "go run cmd/server/main.go" 2>/dev/null || true
+	@# Stop frontend process
+	@pkill -f "wails dev" 2>/dev/null || true
+	@pkill -f "file-search-desktop" 2>/dev/null || true
+	@sleep 2
+	@echo "$(YELLOW)Starting backend in background...$(RESET)"
+	@# Ensure database is running
+	@if ! $(CONTAINER_RUNTIME) ps | grep -q file-search-db; then \
+		echo "$(YELLOW)Database not running, starting it first...$(RESET)"; \
+		$(MAKE) db-start; \
+		sleep 3; \
+	fi
+	@cd $(BACKEND_DIR) && nohup go run cmd/server/main.go > /tmp/file-search-backend.log 2>&1 & echo $$! > /tmp/file-search-backend.pid
+	@echo "$(GREEN)Backend restarted! PID: $$(cat /tmp/file-search-backend.pid)$(RESET)"
+	@sleep 2
+	@echo "$(YELLOW)Starting frontend in development mode...$(RESET)"
+	@cd $(FRONTEND_DIR) && nohup wails dev > /tmp/file-search-frontend.log 2>&1 &
+	@sleep 3
+	@echo "$(GREEN)Development services restarted!$(RESET)"
+	@echo "$(CYAN)Backend logs: tail -f /tmp/file-search-backend.log$(RESET)"
+	@echo "$(CYAN)Frontend logs: tail -f /tmp/file-search-frontend.log$(RESET)"
+
 .PHONY: dev-deps
 dev-deps: install ## Install development dependencies
 	@echo "$(BLUE)Installing development tools...$(RESET)"
@@ -449,7 +480,7 @@ api-test: ## Test backend API endpoints
 .PHONY: docker-up
 docker-up: db-start ## Legacy alias for db-start
 
-.PHONY: docker-down  
+.PHONY: docker-down
 docker-down: db-stop ## Legacy alias for db-stop
 
 .PHONY: logs
@@ -467,7 +498,7 @@ setup-podman: ## Setup Podman as container runtime
 	@echo "$(GREEN)Podman setup complete!$(RESET)"
 
 .PHONY: setup-docker
-setup-docker: ## Setup Docker as container runtime  
+setup-docker: ## Setup Docker as container runtime
 	@echo "$(BLUE)Setting up Docker...$(RESET)"
 	@command -v docker >/dev/null 2>&1 || { echo "$(RED)Docker not installed. Please install Docker first.$(RESET)"; exit 1; }
 	@cd $(BACKEND_DIR) && ln -sf docker-compose.yml docker-compose.yml

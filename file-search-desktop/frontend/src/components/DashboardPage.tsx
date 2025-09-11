@@ -3,9 +3,17 @@ interface IndexingStatus {
   filesProcessed: number
   totalFiles: number
   pendingFiles: number
+  processingFiles: number
   currentFile: string
   errors: number
+  skippedFiles: number
   elapsedTime: number
+}
+
+interface FileTypeBreakdown {
+  extension: string
+  type: string
+  count: number
 }
 
 interface SystemStatus {
@@ -15,6 +23,8 @@ interface SystemStatus {
   embeddings: any
   indexing: any
   resources: any
+  file_type_breakdown?: FileTypeBreakdown[]
+  skipped_files?: number
 }
 
 interface DashboardPageProps {
@@ -39,6 +49,9 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
           break
         case 'resume':
           await window.go.main.App.ResumeIndexing()
+          break
+        case 'reindex-failed':
+          await window.go.main.App.ReindexFailed()
           break
       }
     } catch (error) {
@@ -65,37 +78,39 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
       </div>
 
       <div className="dashboard-cards">
-        <div className="dashboard-card">
-          <h3>System Status</h3>
-          <div className="value">{systemStatus?.status || 'Unknown'}</div>
-          <div className="label">Current state</div>
-        </div>
-
-        <div className="dashboard-card">
-          <h3>Uptime</h3>
-          <div className="value">{systemStatus ? formatUptime(systemStatus.uptime) : '0h 0m'}</div>
-          <div className="label">System running time</div>
-        </div>
-
-        <div className="dashboard-card">
+        <div className="dashboard-card" title="Number of files successfully processed and indexed">
           <h3>Files Processed</h3>
           <div className="value">{indexingStatus?.filesProcessed || 0}</div>
           <div className="label">Total indexed files</div>
         </div>
 
-        <div className="dashboard-card">
+        <div className="dashboard-card" title="Number of files currently being processed by workers">
+          <h3>Processing Now</h3>
+          <div className="value" style={{ color: (indexingStatus?.processingFiles || 0) > 0 ? '#28a745' : undefined }}>
+            {indexingStatus?.processingFiles || 0}
+          </div>
+          <div className="label">Files being processed</div>
+        </div>
+
+        <div className="dashboard-card" title="Number of files waiting to be indexed">
           <h3>Files Queued</h3>
           <div className="value">{indexingStatus?.pendingFiles || 0}</div>
           <div className="label">Pending for indexing</div>
         </div>
 
-        <div className="dashboard-card">
-          <h3>Indexing Errors</h3>
+        <div className="dashboard-card" title="Number of files that failed to be indexed">
+          <h3>Failed Files</h3>
           <div className="value">{indexingStatus?.errors || 0}</div>
-          <div className="label">Failed file operations</div>
+          <div className="label">Indexing failures</div>
         </div>
 
-        <div className="dashboard-card">
+        <div className="dashboard-card" title="Number of files skipped during indexing">
+          <h3>Skipped Files</h3>
+          <div className="value">{indexingStatus?.skippedFiles || 0}</div>
+          <div className="label">Files skipped</div>
+        </div>
+
+        <div className="dashboard-card" title="Total disk space used by the database">
           <h3>Database Size</h3>
           <div className="value">{systemStatus?.database?.size_info?.total_db_size || 'N/A'}</div>
           <div className="label">Total disk space used</div>
@@ -141,6 +156,11 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
           {indexingStatus?.state === 'running' && (
             <span style={{ marginLeft: 'auto', fontSize: '14px', color: '#6c757d' }}>
               {indexingStatus.filesProcessed} / {indexingStatus.totalFiles} files
+              {indexingStatus.processingFiles > 0 && (
+                <span style={{ marginLeft: '10px', color: '#28a745', fontWeight: 'bold' }}>
+                  ({indexingStatus.processingFiles} processing)
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -150,6 +170,7 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
             className="control-button start"
             onClick={() => handleIndexingControl('start')}
             disabled={indexingStatus?.state === 'running'}
+            title="Start indexing files from configured directories"
           >
             🎬 Start Indexing
           </button>
@@ -158,6 +179,7 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
             className="control-button stop"
             onClick={() => handleIndexingControl('stop')}
             disabled={indexingStatus?.state !== 'running'}
+            title="Stop the currently running indexing process"
           >
             🛑 Stop Indexing
           </button>
@@ -166,6 +188,7 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
             className="control-button pause"
             onClick={() => handleIndexingControl('pause')}
             disabled={indexingStatus?.state !== 'running'}
+            title="Temporarily pause the indexing process"
           >
             ⏸️ Pause
           </button>
@@ -174,8 +197,18 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
             className="control-button pause"
             onClick={() => handleIndexingControl('resume')}
             disabled={indexingStatus?.state !== 'paused'}
+            title="Resume a paused indexing process"
           >
             ▶️ Resume
+          </button>
+          
+          <button
+            className="control-button reindex-failed"
+            onClick={() => handleIndexingControl('reindex-failed')}
+            disabled={indexingStatus?.state === 'running'}
+            title="Retry indexing all files that previously failed"
+          >
+            🔄 Retry Failed Files
           </button>
         </div>
 
@@ -203,6 +236,41 @@ function DashboardPage({ indexingStatus, systemStatus }: DashboardPageProps) {
           </div>
         )}
       </div>
+
+      {systemStatus?.file_type_breakdown && systemStatus.file_type_breakdown.length > 0 && (
+        <div className="indexing-controls">
+          <h3>Indexed Files by Type</h3>
+          <div className="file-type-breakdown">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #ecf0f1' }}>
+                  <th style={{ textAlign: 'left', padding: '10px', color: '#2c3e50', fontWeight: 600 }}>File Type</th>
+                  <th style={{ textAlign: 'left', padding: '10px', color: '#2c3e50', fontWeight: 600 }}>Extension</th>
+                  <th style={{ textAlign: 'right', padding: '10px', color: '#2c3e50', fontWeight: 600 }}>Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {systemStatus.file_type_breakdown.slice(0, 10).map((item: any, index: number) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #ecf0f1' }}>
+                    <td style={{ padding: '8px 10px', color: '#495057' }}>{item.type}</td>
+                    <td style={{ padding: '8px 10px', color: '#6c757d', fontFamily: 'monospace', fontSize: '0.9em' }}>
+                      {item.extension}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 500, color: '#2c3e50' }}>
+                      {item.count.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {systemStatus.file_type_breakdown.length > 10 && (
+              <div style={{ padding: '10px', textAlign: 'center', color: '#6c757d', fontSize: '0.9em' }}>
+                ...and {systemStatus.file_type_breakdown.length - 10} more file types
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {systemStatus && (
         <div className="indexing-controls">

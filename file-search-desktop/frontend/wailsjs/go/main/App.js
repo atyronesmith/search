@@ -10,12 +10,36 @@ export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }
 
+export function GetCurrentLLMModel() {
+  return window['go']['main']['App']['GetCurrentLLMModel']();
+}
+
+export function GetDirectoryContents(arg1) {
+  return window['go']['main']['App']['GetDirectoryContents'](arg1);
+}
+
 export function GetFiles(arg1, arg2) {
   return window['go']['main']['App']['GetFiles'](arg1, arg2);
 }
 
+export function GetFilesSorted(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetFilesSorted'](arg1, arg2, arg3, arg4);
+}
+
 export function GetIndexingStatus() {
   return window['go']['main']['App']['GetIndexingStatus']();
+}
+
+export function GetLLMDebugInfo() {
+  return window['go']['main']['App']['GetLLMDebugInfo']();
+}
+
+export function GetPrompt() {
+  return window['go']['main']['App']['GetPrompt']();
+}
+
+export function GetRootDirectories() {
+  return window['go']['main']['App']['GetRootDirectories']();
 }
 
 export function GetSystemStatus() {
@@ -28,6 +52,10 @@ export function IsLLMQuery(arg1) {
 
 export function PauseIndexing() {
   return window['go']['main']['App']['PauseIndexing']();
+}
+
+export function ReindexFailed() {
+  return window['go']['main']['App']['ReindexFailed']();
 }
 
 export function ResetDatabase() {
@@ -56,4 +84,8 @@ export function StopIndexing() {
 
 export function UpdateConfig(arg1) {
   return window['go']['main']['App']['UpdateConfig'](arg1);
+}
+
+export function UpdatePrompt(arg1) {
+  return window['go']['main']['App']['UpdatePrompt'](arg1);
 }

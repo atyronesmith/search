@@ -12,11 +12,11 @@ import (
 
 // PDFExtractor handles PDF files using pdftotext utility
 type PDFExtractor struct {
-	config *ExtractorConfig
+	config *Config
 }
 
 // NewPDFExtractor creates a new PDF extractor
-func NewPDFExtractor(config *ExtractorConfig) *PDFExtractor {
+func NewPDFExtractor(config *Config) *PDFExtractor {
 	if config == nil {
 		config = DefaultConfig()
 	}

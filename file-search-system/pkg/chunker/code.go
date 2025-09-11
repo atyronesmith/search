@@ -28,7 +28,7 @@ func (c *CodeChunker) SupportsFileType(fileType string) bool {
 }
 
 // Chunk chunks code content respecting code structure
-func (c *CodeChunker) Chunk(content *extractor.ExtractedContent, config *ChunkerConfig) ([]Chunk, error) {
+func (c *CodeChunker) Chunk(content *extractor.ExtractedContent, config *Config) ([]Chunk, error) {
 	// If structured content is available, use it
 	if len(content.Sections) > 0 {
 		return c.chunkBySections(content.Sections, config)
@@ -39,7 +39,7 @@ func (c *CodeChunker) Chunk(content *extractor.ExtractedContent, config *Chunker
 }
 
 // chunkBySections chunks code using extracted sections (functions, classes, etc.)
-func (c *CodeChunker) chunkBySections(sections []extractor.SectionContent, config *ChunkerConfig) ([]Chunk, error) {
+func (c *CodeChunker) chunkBySections(sections []extractor.SectionContent, config *Config) ([]Chunk, error) {
 	var chunks []Chunk
 	chunkIndex := 0
 	
@@ -103,7 +103,7 @@ func (c *CodeChunker) chunkBySections(sections []extractor.SectionContent, confi
 }
 
 // chunkByCodeStructure chunks code by detecting functions, classes, etc.
-func (c *CodeChunker) chunkByCodeStructure(text string, config *ChunkerConfig) ([]Chunk, error) {
+func (c *CodeChunker) chunkByCodeStructure(text string, config *Config) ([]Chunk, error) {
 	lines := strings.Split(text, "\n")
 	var chunks []Chunk
 	chunkIndex := 0
@@ -310,7 +310,7 @@ func (c *CodeChunker) extractClassName(line string) string {
 }
 
 // splitLargeCodeSection splits a large code section into smaller chunks
-func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex int, config *ChunkerConfig) []Chunk {
+func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex int, config *Config) []Chunk {
 	lines := strings.Split(text, "\n")
 	var chunks []Chunk
 	chunkIndex := startIndex
@@ -366,7 +366,7 @@ func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex in
 }
 
 // splitLargeCodeBlock splits a large code block
-func (c *CodeChunker) splitLargeCodeBlock(block CodeBlock, lines []string, startIndex int, config *ChunkerConfig) []Chunk {
+func (c *CodeChunker) splitLargeCodeBlock(block CodeBlock, lines []string, startIndex int, config *Config) []Chunk {
 	blockLines := lines[block.StartLine : block.EndLine+1]
 	text := strings.Join(blockLines, "\n")
 	
@@ -374,7 +374,7 @@ func (c *CodeChunker) splitLargeCodeBlock(block CodeBlock, lines []string, start
 }
 
 // chunkByLines provides simple line-based chunking as fallback
-func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *ChunkerConfig) []Chunk {
+func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *Config) []Chunk {
 	var chunks []Chunk
 	chunkIndex := startIndex
 	
@@ -422,7 +422,7 @@ func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *Chunk
 }
 
 // groupRelatedChunks groups related code chunks (imports with functions, etc.)
-func (c *CodeChunker) groupRelatedChunks(chunks []Chunk, config *ChunkerConfig) []Chunk {
+func (c *CodeChunker) groupRelatedChunks(chunks []Chunk, config *Config) []Chunk {
 	// Simple grouping: if total size allows, combine small adjacent chunks
 	var grouped []Chunk
 	

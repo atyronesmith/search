@@ -6,15 +6,29 @@ export function CallAPI(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function GetConfig():Promise<string>;
 
+export function GetCurrentLLMModel():Promise<string>;
+
+export function GetDirectoryContents(arg1:string):Promise<Record<string, any>>;
+
 export function GetFiles(arg1:number,arg2:number):Promise<Array<Record<string, any>>>;
 
+export function GetFilesSorted(arg1:number,arg2:number,arg3:string,arg4:string):Promise<Array<Record<string, any>>>;
+
 export function GetIndexingStatus():Promise<main.IndexingStatus>;
+
+export function GetLLMDebugInfo():Promise<main.DebugInfo>;
+
+export function GetPrompt():Promise<string>;
+
+export function GetRootDirectories():Promise<Record<string, any>>;
 
 export function GetSystemStatus():Promise<main.SystemStatus>;
 
 export function IsLLMQuery(arg1:string):Promise<boolean>;
 
 export function PauseIndexing():Promise<void>;
+
+export function ReindexFailed():Promise<void>;
 
 export function ResetDatabase():Promise<void>;
 
@@ -29,3 +43,5 @@ export function StartIndexing(arg1:string):Promise<void>;
 export function StopIndexing():Promise<void>;
 
 export function UpdateConfig(arg1:string):Promise<void>;
+
+export function UpdatePrompt(arg1:string):Promise<string>;

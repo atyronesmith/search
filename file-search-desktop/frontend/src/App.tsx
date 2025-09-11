@@ -4,6 +4,8 @@ import SearchPage from './components/SearchPage'
 import DashboardPage from './components/DashboardPage'
 import FilesPage from './components/FilesPage'
 import SettingsPage from './components/SettingsPage'
+import PromptPage from './components/PromptPage'
+import DebugPage from './components/DebugPage'
 
 function App() {
   const [currentPage, setCurrentPage] = useState('search')
@@ -86,6 +88,10 @@ function App() {
         return <FilesPage />
       case 'settings':
         return <SettingsPage />
+      case 'prompt':
+        return <PromptPage />
+      case 'debug':
+        return <DebugPage />
       default:
         return <SearchPage onSearch={handleSearch} onSearchWithDetails={handleSearchWithDetails} searchQuery={searchQuery} searchResults={searchResults} />
     }
@@ -118,23 +124,55 @@ function App() {
               ⚙️ Settings
             </button>
           </li>
+          <li className={currentPage === 'prompt' ? 'active' : ''}>
+            <button onClick={() => setCurrentPage('prompt')}>
+              🤖 Prompt
+            </button>
+          </li>
+          <li className={currentPage === 'debug' ? 'active' : ''}>
+            <button onClick={() => setCurrentPage('debug')}>
+              🐛 Debug
+            </button>
+          </li>
         </ul>
         
-        {indexingStatus && (
+        {(indexingStatus || systemStatus) && (
           <div className="sidebar-status">
-            <div className="status-item">
-              <span className="status-label">Status:</span>
-              <span className={`status-value ${indexingStatus.state}`}>
-                {indexingStatus.state}
-              </span>
-            </div>
-            {indexingStatus.state === 'running' && (
-              <div className="status-item">
-                <span className="status-label">Progress:</span>
-                <span className="status-value">
-                  {indexingStatus.filesProcessed} / {indexingStatus.totalFiles}
-                </span>
-              </div>
+            {indexingStatus && (
+              <>
+                <div className="status-item">
+                  <span className="status-label">Indexing Status:</span>
+                  <span className={`status-value ${indexingStatus.state}`}>
+                    {indexingStatus.state}
+                  </span>
+                </div>
+                {indexingStatus.state === 'running' && (
+                  <div className="status-item">
+                    <span className="status-label">Progress:</span>
+                    <span className="status-value">
+                      {indexingStatus.filesProcessed} / {indexingStatus.totalFiles}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+            {systemStatus && (
+              <>
+                <div className="status-item" style={{ marginTop: '8px' }}>
+                  <span className="status-label" style={{ fontSize: '0.85em' }}>System Status:</span>
+                  <span className={`status-value ${systemStatus.status === 'healthy' ? 'connected' : 'disconnected'}`} style={{ fontSize: '0.85em' }}>
+                    {systemStatus.status === 'healthy' ? 'Healthy' : systemStatus.status === 'disconnected' ? 'Disconnected' : 'Error'}
+                  </span>
+                </div>
+                {systemStatus.status === 'healthy' && systemStatus.uptime && (
+                  <div className="status-item">
+                    <span className="status-label" style={{ fontSize: '0.85em' }}>Uptime:</span>
+                    <span className="status-value" style={{ fontSize: '0.85em' }}>
+                      {Math.floor(systemStatus.uptime / 60)}m
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

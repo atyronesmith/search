@@ -9,11 +9,11 @@ import (
 
 // CodeExtractor handles source code files
 type CodeExtractor struct {
-	config *ExtractorConfig
+	config *Config
 }
 
 // NewCodeExtractor creates a new code extractor
-func NewCodeExtractor(config *ExtractorConfig) *CodeExtractor {
+func NewCodeExtractor(config *Config) *CodeExtractor {
 	if config == nil {
 		config = DefaultConfig()
 	}
