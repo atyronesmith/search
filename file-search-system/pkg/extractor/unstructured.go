@@ -298,7 +298,12 @@ func (e *UnstructuredExtractor) extractViaAPI(ctx context.Context, filePath stri
 		}
 		resp = res.resp
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	// Check HTTP status before reading body
 	if resp.StatusCode != http.StatusOK {

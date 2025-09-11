@@ -185,7 +185,15 @@ func (s *Scanner) calculateFileHash(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Log error but don't fail the function - hash might still be valid
+			log := s.log // Assuming scanner has a log field
+			if log != nil {
+				log.WithError(err).WithField("path", path).Error("Failed to close file after hash calculation")
+			}
+		}
+	}()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {

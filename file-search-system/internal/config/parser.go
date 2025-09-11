@@ -37,7 +37,12 @@ func (p *Parser) LoadFile(filename string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open config file %s: %v", filename, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Ignore close error - file was already read
+			_ = err
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	currentSection := ""

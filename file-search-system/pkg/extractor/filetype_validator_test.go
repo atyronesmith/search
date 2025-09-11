@@ -21,14 +21,20 @@ func TestFileTypeValidator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() {
+			if err := os.Remove(tmpFile.Name()); err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
 		
 		// Write ZIP file header (PK signature)
 		zipHeader := []byte{0x50, 0x4B, 0x03, 0x04} // ZIP file signature
 		if _, err := tmpFile.Write(zipHeader); err != nil {
 			t.Fatal(err)
 		}
-		tmpFile.Close()
+		if err := tmpFile.Close(); err != nil {
+			t.Fatalf("Failed to close temp file: %v", err)
+		}
 		
 		// Validate the file
 		result, err := validator.ValidateFile(tmpFile.Name())
@@ -59,13 +65,19 @@ func TestFileTypeValidator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() {
+			if err := os.Remove(tmpFile.Name()); err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
 		
 		// Write some text content
 		if _, err := tmpFile.WriteString("This is a test text file."); err != nil {
 			t.Fatal(err)
 		}
-		tmpFile.Close()
+		if err := tmpFile.Close(); err != nil {
+			t.Fatalf("Failed to close temp file: %v", err)
+		}
 		
 		// Validate the file
 		result, err := validator.ValidateFile(tmpFile.Name())
@@ -92,7 +104,11 @@ func TestFileTypeValidator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() {
+			if err := os.Remove(tmpFile.Name()); err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
 		
 		// Write email content (will be detected as text/plain)
 		emailContent := `From: sender@example.com
@@ -103,7 +119,9 @@ This is a test email.`
 		if _, err := tmpFile.WriteString(emailContent); err != nil {
 			t.Fatal(err)
 		}
-		tmpFile.Close()
+		if err := tmpFile.Close(); err != nil {
+			t.Fatalf("Failed to close temp file: %v", err)
+		}
 		
 		// Validate the file
 		result, err := validator.ValidateFile(tmpFile.Name())

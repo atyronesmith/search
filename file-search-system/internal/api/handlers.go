@@ -569,7 +569,9 @@ func (s *Server) handleWSClient(conn *websocket.Conn) {
 		delete(s.wsClients, conn)
 		s.wsMutex.Unlock()
 
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close WebSocket connection")
+		}
 	}()
 
 	// Set read deadline

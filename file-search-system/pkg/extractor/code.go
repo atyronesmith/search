@@ -90,7 +90,12 @@ func (e *CodeExtractor) Extract(ctx context.Context, filePath string) (*Extracte
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Ignore close error - file content was already read
+			_ = err
+		}
+	}()
 
 	// Check file size
 	info, err := file.Stat()

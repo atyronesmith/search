@@ -80,7 +80,9 @@ func (s *Server) Stop() error {
 	// Close all WebSocket connections
 	s.wsMutex.Lock()
 	for conn := range s.wsClients {
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close WebSocket connection during shutdown")
+		}
 	}
 	s.wsMutex.Unlock()
 

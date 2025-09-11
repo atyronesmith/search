@@ -99,7 +99,11 @@ func (s *Server) getFiles(req *FileListRequest) ([]database.File, int64, error) 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close database rows")
+		}
+	}()
 
 	var files []database.File
 	for rows.Next() {
@@ -188,7 +192,11 @@ func (s *Server) getFileContent(fileID int64) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close database rows")
+		}
+	}()
 
 	var chunks []map[string]interface{}
 	fullContent := strings.Builder{}
@@ -376,7 +384,11 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 	fileTypeBreakdown := []map[string]interface{}{}
 	ftRows, err := s.db.Query(ctx, fileTypeQuery)
 	if err == nil {
-		defer ftRows.Close()
+		defer func() {
+			if err := ftRows.Close(); err != nil {
+				s.log.WithError(err).Error("Failed to close file type query rows")
+			}
+		}()
 		for ftRows.Next() {
 			var ext string
 			var count int64
@@ -659,7 +671,11 @@ func (s *Server) getMetrics() (map[string]interface{}, error) {
 
 	rows, err := s.db.Query(ctx, sizeQuery)
 	if err == nil {
-		defer rows.Close()
+		defer func() {
+		if err := rows.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close database rows")
+		}
+	}()
 
 		tableSizes := []map[string]interface{}{}
 		for rows.Next() {
@@ -706,7 +722,11 @@ func (s *Server) getSearchSuggestions(query string, limit int) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close database rows")
+		}
+	}()
 
 	var suggestions []string
 	for rows.Next() {
@@ -728,7 +748,11 @@ func (s *Server) getSearchSuggestions(query string, limit int) ([]string, error)
 
 		rows, err := s.db.Query(ctx, contentQuery, query, remaining)
 		if err == nil {
-			defer rows.Close()
+			defer func() {
+		if err := rows.Close(); err != nil {
+			s.log.WithError(err).Error("Failed to close database rows")
+		}
+	}()
 
 			for rows.Next() {
 				var word string
