@@ -53,9 +53,17 @@ CREATE TABLE chunks (
     start_line INTEGER, -- For code files
     char_start INTEGER NOT NULL,
     char_end INTEGER NOT NULL,
-    chunk_type TEXT CHECK (chunk_type IN ('semantic', 'code', 'table', 'list', 'sliding')),
+    chunk_type TEXT CHECK (chunk_type IN ('semantic', 'code', 'table', 'list', 'sliding', 'element')),
     metadata JSONB DEFAULT '{}'::jsonb,
     element_id BIGINT, -- Reference to document_elements for structured content
+    -- Element-based chunking metadata
+    element_type VARCHAR(50), -- Title, NarrativeText, Table, ListItem, etc.
+    element_types TEXT[], -- For grouped elements
+    category_depth INTEGER, -- Hierarchy level (0=top, 1=section, 2=subsection)
+    parent_element_id VARCHAR(100), -- Unstructured parent_id
+    is_title BOOLEAN DEFAULT FALSE,
+    is_header BOOLEAN DEFAULT FALSE,
+    emphasis_score FLOAT DEFAULT 1.0, -- For search boosting
     UNIQUE(file_id, chunk_index)
 );
 
@@ -145,6 +153,12 @@ CREATE INDEX idx_files_content_date ON files ((royal_metadata->>'content_date'))
 CREATE INDEX idx_chunks_file ON chunks(file_id);
 CREATE INDEX idx_chunks_element_id ON chunks(element_id);
 CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Indexes for element-based chunking
+CREATE INDEX idx_chunks_element_type ON chunks(element_type);
+CREATE INDEX idx_chunks_emphasis ON chunks(emphasis_score DESC);
+CREATE INDEX idx_chunks_is_title ON chunks(is_title) WHERE is_title = TRUE;
+CREATE INDEX idx_chunks_is_header ON chunks(is_header) WHERE is_header = TRUE;
+CREATE INDEX idx_chunks_category_depth ON chunks(category_depth);
 
 CREATE INDEX idx_text_search_content ON text_search USING GIN (tsv_content);
 CREATE INDEX idx_text_search_title ON text_search USING GIN (title_tsv);
