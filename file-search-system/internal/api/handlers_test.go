@@ -16,7 +16,7 @@ func TestJSONHelpers(t *testing.T) {
 			Message: "test message",
 			Data:    map[string]string{"key": "value"},
 		}
-		
+
 		assert.True(t, response.Success)
 		assert.Equal(t, "test message", response.Message)
 		assert.NotNil(t, response.Data)
@@ -28,7 +28,7 @@ func TestJSONHelpers(t *testing.T) {
 			Message: "test error",
 			Code:    400,
 		}
-		
+
 		assert.Equal(t, "Bad Request", response.Error)
 		assert.Equal(t, "test error", response.Message)
 		assert.Equal(t, 400, response.Code)
@@ -42,7 +42,7 @@ func TestSearchRequest(t *testing.T) {
 			Limit:  10,
 			Offset: 0,
 		}
-		
+
 		assert.NotEmpty(t, request.Query)
 		assert.True(t, request.Limit > 0)
 		assert.True(t, request.Offset >= 0)
@@ -56,7 +56,7 @@ func TestIndexingRequest(t *testing.T) {
 			Recursive: true,
 			Force:     false,
 		}
-		
+
 		assert.NotEmpty(t, request.Paths)
 		assert.True(t, request.Recursive)
 		assert.False(t, request.Force)
@@ -79,15 +79,16 @@ func TestHTTPHelpers(t *testing.T) {
 func TestResponseWriter(t *testing.T) {
 	t.Run("response writer test", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		
+
 		data := map[string]string{"message": "test"}
 		jsonData, err := json.Marshal(data)
 		assert.NoError(t, err)
-		
+
 		recorder.Header().Set("Content-Type", "application/json")
 		recorder.WriteHeader(http.StatusOK)
-		recorder.Write(jsonData)
-		
+		_, writeErr := recorder.Write(jsonData)
+		assert.NoError(t, writeErr)
+
 		assert.Equal(t, http.StatusOK, recorder.Code)
 		assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 		assert.Contains(t, recorder.Body.String(), "test")
