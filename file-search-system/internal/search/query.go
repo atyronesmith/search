@@ -10,10 +10,10 @@ import (
 
 // QueryProcessor handles query parsing and optimization
 type QueryProcessor struct {
-	stopWords   map[string]bool
-	synonyms    map[string][]string
-	maxTerms    int
-	minTermLen  int
+	stopWords  map[string]bool
+	synonyms   map[string][]string
+	maxTerms   int
+	minTermLen int
 }
 
 // NewQueryProcessor creates a new query processor
@@ -38,7 +38,7 @@ type ProcessedQuery struct {
 	DateRange     *DateRange     `json:"date_range,omitempty"`
 	SizeRange     *SizeRange     `json:"size_range,omitempty"`
 	IsQuestion    bool           `json:"is_question"`
-	QueryType     string         `json:"query_type"` // "keyword", "natural", "code", "path"
+	QueryType     string         `json:"query_type"`               // "keyword", "natural", "code", "path"
 	EnhancedQuery *EnhancedQuery `json:"enhanced_query,omitempty"` // LLM-enhanced query with royal processor
 }
 
@@ -59,47 +59,47 @@ func (qp *QueryProcessor) ProcessQuery(query string) (*ProcessedQuery, error) {
 	pq := &ProcessedQuery{
 		Original: query,
 	}
-	
+
 	// Detect query type
 	pq.QueryType = qp.detectQueryType(query)
-	
+
 	// Extract special operators and filters
 	query = qp.extractFilters(query, pq)
-	
+
 	// Extract phrases (quoted strings)
 	query, phrases := qp.extractPhrases(query)
 	pq.Phrases = phrases
-	
+
 	// Extract must include/exclude terms
 	query = qp.extractMustTerms(query, pq)
-	
+
 	// Clean and tokenize
 	pq.Cleaned = qp.cleanQuery(query)
 	pq.Terms = qp.tokenize(pq.Cleaned)
-	
+
 	// Remove stop words (except for code queries)
 	if pq.QueryType != "code" {
 		pq.Terms = qp.removeStopWords(pq.Terms)
 	}
-	
+
 	// Expand with synonyms
 	pq.Terms = qp.expandSynonyms(pq.Terms)
-	
+
 	// Detect if it's a question
 	pq.IsQuestion = qp.isQuestion(pq.Original)
-	
+
 	// Limit number of terms
 	if len(pq.Terms) > qp.maxTerms {
 		pq.Terms = pq.Terms[:qp.maxTerms]
 	}
-	
+
 	return pq, nil
 }
 
 // detectQueryType determines the type of query
 func (qp *QueryProcessor) detectQueryType(query string) string {
 	query = strings.ToLower(query)
-	
+
 	// Check for code patterns
 	codePatterns := []string{
 		"func ", "function ", "class ", "def ", "import ",
@@ -111,17 +111,17 @@ func (qp *QueryProcessor) detectQueryType(query string) string {
 			return "code"
 		}
 	}
-	
+
 	// Check for path patterns
 	if strings.Contains(query, "/") || strings.Contains(query, "\\") {
 		return "path"
 	}
-	
+
 	// Check for natural language patterns
 	if qp.isQuestion(query) || len(strings.Fields(query)) > 5 {
 		return "natural"
 	}
-	
+
 	return "keyword"
 }
 
@@ -136,11 +136,11 @@ func (qp *QueryProcessor) extractFilters(query string, pq *ProcessedQuery) strin
 		}
 	}
 	query = typeRegex.ReplaceAllString(query, "")
-	
+
 	// Extract date filters (e.g., "after:2024-01-01", "after: 2024-01-01", "before:2024-12-31")
 	afterRegex := regexp.MustCompile(`(?i)\bafter:\s*(\S+)`)
 	beforeRegex := regexp.MustCompile(`(?i)\bbefore:\s*(\S+)`)
-	
+
 	afterMatches := afterRegex.FindStringSubmatch(query)
 	if len(afterMatches) > 1 {
 		if t, err := time.Parse("2006-01-02", afterMatches[1]); err == nil {
@@ -151,7 +151,7 @@ func (qp *QueryProcessor) extractFilters(query string, pq *ProcessedQuery) strin
 		}
 	}
 	query = afterRegex.ReplaceAllString(query, "")
-	
+
 	beforeMatches := beforeRegex.FindStringSubmatch(query)
 	if len(beforeMatches) > 1 {
 		if t, err := time.Parse("2006-01-02", beforeMatches[1]); err == nil {
@@ -162,7 +162,7 @@ func (qp *QueryProcessor) extractFilters(query string, pq *ProcessedQuery) strin
 		}
 	}
 	query = beforeRegex.ReplaceAllString(query, "")
-	
+
 	// Extract size filters (e.g., "size:>10MB", "size: <1GB")
 	sizeRegex := regexp.MustCompile(`(?i)\bsize:\s*([<>])(\d+)(KB|MB|GB)?`)
 	sizeMatches := sizeRegex.FindStringSubmatch(query)
@@ -178,7 +178,7 @@ func (qp *QueryProcessor) extractFilters(query string, pq *ProcessedQuery) strin
 		}
 	}
 	query = sizeRegex.ReplaceAllString(query, "")
-	
+
 	return strings.TrimSpace(query)
 }
 
@@ -186,17 +186,17 @@ func (qp *QueryProcessor) extractFilters(query string, pq *ProcessedQuery) strin
 func (qp *QueryProcessor) extractPhrases(query string) (string, []string) {
 	var phrases []string
 	phraseRegex := regexp.MustCompile(`"([^"]+)"`)
-	
+
 	matches := phraseRegex.FindAllStringSubmatch(query, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
 			phrases = append(phrases, match[1])
 		}
 	}
-	
+
 	// Remove phrases from query
 	query = phraseRegex.ReplaceAllString(query, "")
-	
+
 	return query, phrases
 }
 
@@ -211,7 +211,7 @@ func (qp *QueryProcessor) extractMustTerms(query string, pq *ProcessedQuery) str
 		}
 	}
 	query = includeRegex.ReplaceAllString(query, "")
-	
+
 	// Extract must exclude terms (- prefix)
 	excludeRegex := regexp.MustCompile(`-(\S+)`)
 	excludeMatches := excludeRegex.FindAllStringSubmatch(query, -1)
@@ -221,7 +221,7 @@ func (qp *QueryProcessor) extractMustTerms(query string, pq *ProcessedQuery) str
 		}
 	}
 	query = excludeRegex.ReplaceAllString(query, "")
-	
+
 	return query
 }
 
@@ -229,56 +229,56 @@ func (qp *QueryProcessor) extractMustTerms(query string, pq *ProcessedQuery) str
 func (qp *QueryProcessor) cleanQuery(query string) string {
 	// Convert to lowercase
 	query = strings.ToLower(query)
-	
+
 	// Remove extra whitespace
 	query = strings.Join(strings.Fields(query), " ")
-	
+
 	// Remove special characters (keep alphanumeric, spaces, and some punctuation)
 	reg := regexp.MustCompile(`[^a-z0-9\s\-_\.]`)
 	query = reg.ReplaceAllString(query, " ")
-	
+
 	// Remove extra spaces again
 	query = strings.Join(strings.Fields(query), " ")
-	
+
 	return query
 }
 
 // tokenize splits the query into terms
 func (qp *QueryProcessor) tokenize(query string) []string {
 	var terms []string
-	
+
 	// Split by whitespace
 	words := strings.Fields(query)
-	
+
 	for _, word := range words {
 		// Skip if too short
 		if len(word) < qp.minTermLen {
 			continue
 		}
-		
+
 		// Remove trailing punctuation
 		word = strings.TrimFunc(word, func(r rune) bool {
 			return unicode.IsPunct(r)
 		})
-		
+
 		if word != "" {
 			terms = append(terms, word)
 		}
 	}
-	
+
 	return terms
 }
 
 // removeStopWords removes common stop words
 func (qp *QueryProcessor) removeStopWords(terms []string) []string {
 	var filtered []string
-	
+
 	for _, term := range terms {
 		if !qp.stopWords[term] {
 			filtered = append(filtered, term)
 		}
 	}
-	
+
 	return filtered
 }
 
@@ -286,13 +286,13 @@ func (qp *QueryProcessor) removeStopWords(terms []string) []string {
 func (qp *QueryProcessor) expandSynonyms(terms []string) []string {
 	expanded := make([]string, 0, len(terms)*2)
 	seen := make(map[string]bool)
-	
+
 	for _, term := range terms {
 		if !seen[term] {
 			expanded = append(expanded, term)
 			seen[term] = true
 		}
-		
+
 		// Add synonyms
 		if synonyms, ok := qp.synonyms[term]; ok {
 			for _, syn := range synonyms {
@@ -303,7 +303,7 @@ func (qp *QueryProcessor) expandSynonyms(terms []string) []string {
 			}
 		}
 	}
-	
+
 	return expanded
 }
 
@@ -311,13 +311,13 @@ func (qp *QueryProcessor) expandSynonyms(terms []string) []string {
 func (qp *QueryProcessor) isQuestion(query string) bool {
 	query = strings.ToLower(query)
 	questionWords := []string{"what", "where", "when", "why", "how", "who", "which", "whose", "whom"}
-	
+
 	for _, word := range questionWords {
 		if strings.HasPrefix(query, word+" ") {
 			return true
 		}
 	}
-	
+
 	return strings.Contains(query, "?")
 }
 
@@ -325,7 +325,7 @@ func (qp *QueryProcessor) isQuestion(query string) bool {
 func (qp *QueryProcessor) parseSize(value, unit string) int64 {
 	var size int64
 	fmt.Sscanf(value, "%d", &size)
-	
+
 	switch strings.ToUpper(unit) {
 	case "KB":
 		size *= 1024
@@ -336,7 +336,7 @@ func (qp *QueryProcessor) parseSize(value, unit string) int64 {
 	default:
 		// Assume bytes if no unit
 	}
-	
+
 	return size
 }
 
@@ -349,31 +349,31 @@ func defaultStopWords() map[string]bool {
 		"there", "their", "they", "them", "then", "than", "can", "could",
 		"would", "should", "shall", "may", "might", "must", "will", "would",
 	}
-	
+
 	stopWords := make(map[string]bool)
 	for _, word := range words {
 		stopWords[word] = true
 	}
-	
+
 	return stopWords
 }
 
 // defaultSynonyms returns a map of common synonyms
 func defaultSynonyms() map[string][]string {
 	return map[string][]string{
-		"search":   {"find", "locate", "lookup"},
-		"find":     {"search", "locate", "discover"},
-		"file":     {"document", "doc"},
-		"document": {"file", "doc"},
-		"folder":   {"directory", "dir"},
+		"search":    {"find", "locate", "lookup"},
+		"find":      {"search", "locate", "discover"},
+		"file":      {"document", "doc"},
+		"document":  {"file", "doc"},
+		"folder":    {"directory", "dir"},
 		"directory": {"folder", "dir"},
-		"create":   {"make", "new", "generate"},
-		"delete":   {"remove", "erase", "del"},
-		"update":   {"modify", "change", "edit"},
-		"config":   {"configuration", "settings", "setup"},
-		"error":    {"bug", "issue", "problem"},
-		"function": {"func", "method", "procedure"},
-		"variable": {"var", "param", "parameter"},
+		"create":    {"make", "new", "generate"},
+		"delete":    {"remove", "erase", "del"},
+		"update":    {"modify", "change", "edit"},
+		"config":    {"configuration", "settings", "setup"},
+		"error":     {"bug", "issue", "problem"},
+		"function":  {"func", "method", "procedure"},
+		"variable":  {"var", "param", "parameter"},
 	}
 }
 
@@ -382,35 +382,35 @@ func (qp *QueryProcessor) BuildRequest(pq *ProcessedQuery) *Request {
 	req := &Request{
 		Query: pq.Cleaned,
 	}
-	
+
 	// Add phrases to query
 	if len(pq.Phrases) > 0 {
 		req.Query = fmt.Sprintf("%s \"%s\"", req.Query, strings.Join(pq.Phrases, "\" \""))
 	}
-	
+
 	// Add must include terms
 	for _, term := range pq.MustInclude {
 		req.Query = fmt.Sprintf("%s +%s", req.Query, term)
 	}
-	
+
 	// Add must exclude terms
 	for _, term := range pq.MustExclude {
 		req.Query = fmt.Sprintf("%s -%s", req.Query, term)
 	}
-	
+
 	// Set filters
 	req.FileTypes = pq.FileTypes
-	
+
 	if pq.DateRange != nil {
 		req.DateFrom = &pq.DateRange.From
 		req.DateTo = &pq.DateRange.To
 	}
-	
+
 	if pq.SizeRange != nil {
 		req.MinSize = pq.SizeRange.Min
 		req.MaxSize = pq.SizeRange.Max
 	}
-	
+
 	// Set search type based on query type
 	switch pq.QueryType {
 	case "code":
@@ -422,6 +422,6 @@ func (qp *QueryProcessor) BuildRequest(pq *ProcessedQuery) *Request {
 	default:
 		req.SearchType = "hybrid"
 	}
-	
+
 	return req
 }

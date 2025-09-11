@@ -6,18 +6,18 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	
+
 	"github.com/file-search/file-search-system/internal/database"
 )
 
 // RoyalSearchTerms represents the comprehensive search term structure
 type RoyalSearchTerms struct {
-	VectorTerms        []string                   `json:"vector_terms"`
-	TextTerms          []string                   `json:"text_terms"`
-	PgTsQuery          string                     `json:"pg_tsquery"`
-	SearchStrategy     string                     `json:"search_strategy"`
-	MetadataFilters    map[string]interface{}     `json:"metadata_filters,omitempty"`
-	MetadataBoostFields []string                   `json:"metadata_boost_fields,omitempty"`
+	VectorTerms         []string               `json:"vector_terms"`
+	TextTerms           []string               `json:"text_terms"`
+	PgTsQuery           string                 `json:"pg_tsquery"`
+	SearchStrategy      string                 `json:"search_strategy"`
+	MetadataFilters     map[string]interface{} `json:"metadata_filters,omitempty"`
+	MetadataBoostFields []string               `json:"metadata_boost_fields,omitempty"`
 }
 
 // ParseErrorWithResponse contains both the parsing error and the raw LLM response
@@ -33,27 +33,27 @@ func (e *ParseErrorWithResponse) Error() string {
 
 // RoyalSearchProcessor handles advanced search term extraction using LLM
 type RoyalSearchProcessor struct {
-	ollamaClient    *OllamaClient
-	model           string
-	enabled         bool
-	corpusMetadata  *CorpusMetadata
-	db              *database.DB
-	promptTemplate  string
+	ollamaClient   *OllamaClient
+	model          string
+	enabled        bool
+	corpusMetadata *CorpusMetadata
+	db             *database.DB
+	promptTemplate string
 }
 
 // CorpusMetadata represents analyzed metadata patterns from the document corpus
 type CorpusMetadata struct {
-	DocumentTypes   []string  `json:"document_types"`
-	Departments     []string  `json:"departments"`
-	Projects        []string  `json:"projects"`
-	Languages       []string  `json:"languages"`
-	TimeRange       struct {
+	DocumentTypes []string `json:"document_types"`
+	Departments   []string `json:"departments"`
+	Projects      []string `json:"projects"`
+	Languages     []string `json:"languages"`
+	TimeRange     struct {
 		Start string `json:"start"`
 		End   string `json:"end"`
 	} `json:"time_range"`
-	Categories      []string  `json:"categories"`
-	TotalFiles      int       `json:"total_files"`
-	LastAnalyzed    string    `json:"last_analyzed"`
+	Categories   []string `json:"categories"`
+	TotalFiles   int      `json:"total_files"`
+	LastAnalyzed string   `json:"last_analyzed"`
 }
 
 // NewRoyalSearchProcessor creates a new royal search processor
@@ -64,7 +64,7 @@ func NewRoyalSearchProcessor(ollamaURL string, modelName string, db *database.DB
 		enabled:      true,
 		db:           db,
 	}
-	
+
 	// Initialize with default corpus metadata
 	processor.corpusMetadata = &CorpusMetadata{
 		DocumentTypes: []string{"pdf", "docx", "xlsx", "csv", "txt"},
@@ -75,10 +75,10 @@ func NewRoyalSearchProcessor(ollamaURL string, modelName string, db *database.DB
 		TotalFiles:    0,
 		LastAnalyzed:  "",
 	}
-	
+
 	// Load prompt template from database
 	processor.loadPromptTemplate()
-	
+
 	return processor
 }
 
@@ -88,10 +88,10 @@ func (r *RoyalSearchProcessor) loadPromptTemplate() {
 		r.promptTemplate = r.getDefaultPromptTemplate()
 		return
 	}
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	query := `SELECT config_value FROM system_config WHERE config_key = 'llm_prompt_template'`
 	err := r.db.QueryRow(ctx, query).Scan(&r.promptTemplate)
 	if err != nil {
@@ -99,7 +99,7 @@ func (r *RoyalSearchProcessor) loadPromptTemplate() {
 		r.promptTemplate = r.getDefaultPromptTemplate()
 		return
 	}
-	
+
 	fmt.Printf("DEBUG: Loaded prompt template from database (length: %d)\n", len(r.promptTemplate))
 }
 
@@ -187,12 +187,12 @@ func (r *RoyalSearchProcessor) GenerateSearchTermsWithDebug(query string, search
 
 	startTime := time.Now()
 	prompt := r.buildPrompt(query, searchContext)
-	
+
 	fmt.Printf("DEBUG: Calling LLM with model=%s, query='%s'\n", r.model, query)
 	response, err := r.ollamaClient.Generate(ctx, r.model, prompt)
 	processTime := time.Since(startTime).Milliseconds()
 	fmt.Printf("DEBUG: LLM call completed in %dms, err=%v\n", processTime, err)
-	
+
 	// Call debug callback if provided
 	if debugCallback != nil {
 		errorMsg := ""
@@ -201,13 +201,13 @@ func (r *RoyalSearchProcessor) GenerateSearchTermsWithDebug(query string, search
 		}
 		debugCallback(prompt, response, errorMsg, processTime)
 	}
-	
+
 	if err != nil {
 		fmt.Printf("DEBUG: Royal processor Ollama error: %v\n", err)
 		// Fallback to basic extraction on error
 		return r.fallbackTerms(query), nil
 	}
-	
+
 	fmt.Printf("DEBUG: Royal processor raw response: %s\n", response)
 	fmt.Printf("DEBUG: Royal processor raw response length: %d\n", len(response))
 
@@ -240,7 +240,7 @@ func (r *RoyalSearchProcessor) GenerateSearchTermsWithDebug(query string, search
 
 	// Validate and clean the terms
 	terms = r.validateAndClean(terms, query)
-	
+
 	return &terms, nil
 }
 
@@ -265,7 +265,7 @@ func (r *RoyalSearchProcessor) buildPrompt(query, searchContext string) string {
 	if prompt == "" {
 		prompt = r.getDefaultPromptTemplate()
 	}
-	
+
 	// Perform template variable substitution
 	prompt = strings.ReplaceAll(prompt, "{{USER_QUERY}}", query)
 	prompt = strings.ReplaceAll(prompt, "{{DOC_TYPES}}", docTypes)
@@ -273,7 +273,7 @@ func (r *RoyalSearchProcessor) buildPrompt(query, searchContext string) string {
 	prompt = strings.ReplaceAll(prompt, "{{CATEGORIES}}", categories)
 	prompt = strings.ReplaceAll(prompt, "{{DEPARTMENTS}}", departments)
 	prompt = strings.ReplaceAll(prompt, "{{TOTAL_FILES}}", totalFiles)
-	
+
 	return prompt
 }
 
@@ -282,7 +282,7 @@ func (r *RoyalSearchProcessor) fallbackTerms(query string) *RoyalSearchTerms {
 	// Clean and tokenize the query
 	query = strings.ToLower(strings.TrimSpace(query))
 	words := strings.Fields(query)
-	
+
 	// Remove common stop words
 	stopWords := map[string]bool{
 		"the": true, "a": true, "an": true, "and": true, "or": true,
@@ -295,20 +295,20 @@ func (r *RoyalSearchProcessor) fallbackTerms(query string) *RoyalSearchTerms {
 		"should": true, "may": true, "might": true, "must": true, "can": true,
 		"is": true, "are": true, "was": true, "were": true, "been": true,
 	}
-	
+
 	var textTerms []string
 	for _, word := range words {
 		if !stopWords[word] && len(word) > 2 {
 			textTerms = append(textTerms, word)
 		}
 	}
-	
+
 	// Generate simple tsquery
 	tsquery := strings.Join(textTerms, " & ")
 	if tsquery == "" {
 		tsquery = query
 	}
-	
+
 	return &RoyalSearchTerms{
 		VectorTerms:         []string{query},
 		TextTerms:           textTerms,
@@ -322,7 +322,7 @@ func (r *RoyalSearchProcessor) fallbackTerms(query string) *RoyalSearchTerms {
 // parsePartialResponse attempts to extract useful terms from malformed JSON
 func (r *RoyalSearchProcessor) parsePartialResponse(response, query string) *RoyalSearchTerms {
 	terms := r.fallbackTerms(query)
-	
+
 	// Try to extract vector_terms
 	if idx := strings.Index(response, `"vector_terms"`); idx >= 0 {
 		if endIdx := strings.Index(response[idx:], "]"); endIdx > 0 {
@@ -340,7 +340,7 @@ func (r *RoyalSearchProcessor) parsePartialResponse(response, query string) *Roy
 			}
 		}
 	}
-	
+
 	// Try to extract text_terms
 	if idx := strings.Index(response, `"text_terms"`); idx >= 0 {
 		if endIdx := strings.Index(response[idx:], "]"); endIdx > 0 {
@@ -357,7 +357,7 @@ func (r *RoyalSearchProcessor) parsePartialResponse(response, query string) *Roy
 			}
 		}
 	}
-	
+
 	// Try to extract pg_tsquery
 	if idx := strings.Index(response, `"pg_tsquery"`); idx >= 0 {
 		if startIdx := strings.Index(response[idx:], `"`); startIdx > 0 {
@@ -367,7 +367,7 @@ func (r *RoyalSearchProcessor) parsePartialResponse(response, query string) *Roy
 			}
 		}
 	}
-	
+
 	terms.SearchStrategy = "Partial extraction from malformed response"
 	return terms
 }
@@ -378,12 +378,12 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 	if len(terms.VectorTerms) == 0 {
 		terms.VectorTerms = []string{originalQuery}
 	}
-	
+
 	if len(terms.TextTerms) == 0 {
 		fallback := r.fallbackTerms(originalQuery)
 		terms.TextTerms = fallback.TextTerms
 	}
-	
+
 	// Clean vector terms
 	var cleanedVector []string
 	for _, term := range terms.VectorTerms {
@@ -393,7 +393,7 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 		}
 	}
 	terms.VectorTerms = cleanedVector
-	
+
 	// Clean text terms - ensure they're lowercase and valid
 	var cleanedText []string
 	seen := make(map[string]bool)
@@ -405,7 +405,7 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 		}
 	}
 	terms.TextTerms = cleanedText
-	
+
 	// Validate pg_tsquery - ensure it's not empty and clean it
 	if terms.PgTsQuery == "" || len(terms.PgTsQuery) < 3 {
 		// Generate simple query from text terms
@@ -423,7 +423,7 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 		// Clean the tsquery - remove query meta words that don't appear in content
 		queryMetaWords := []string{"files", "contain", "word", "find", "all", "show", "list", "get", "that", "the", "a", "an", "with"}
 		cleanedQuery := terms.PgTsQuery
-		
+
 		// Remove meta words from the query
 		for _, metaWord := range queryMetaWords {
 			cleanedQuery = strings.ReplaceAll(cleanedQuery, metaWord+" & ", "")
@@ -434,12 +434,12 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 				cleanedQuery = ""
 			}
 		}
-		
+
 		// Clean up remaining operators
 		cleanedQuery = strings.TrimSpace(cleanedQuery)
 		cleanedQuery = strings.Trim(cleanedQuery, "&|")
 		cleanedQuery = strings.TrimSpace(cleanedQuery)
-		
+
 		// If we removed everything, fall back to extracting key terms from original query
 		if cleanedQuery == "" {
 			// Extract actual content words from original query
@@ -457,17 +457,17 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 				cleanedQuery = strings.Join(contentWords, " | ")
 			}
 		}
-		
+
 		if cleanedQuery != "" {
 			terms.PgTsQuery = cleanedQuery
 		}
 	}
-	
+
 	// Ensure we have a search strategy
 	if terms.SearchStrategy == "" {
 		terms.SearchStrategy = "Hybrid search with vector and text matching"
 	}
-	
+
 	// Limit vector terms to 5 and text terms to 10
 	if len(terms.VectorTerms) > 5 {
 		terms.VectorTerms = terms.VectorTerms[:5]
@@ -475,14 +475,14 @@ func (r *RoyalSearchProcessor) validateAndClean(terms RoyalSearchTerms, original
 	if len(terms.TextTerms) > 10 {
 		terms.TextTerms = terms.TextTerms[:10]
 	}
-	
+
 	return terms
 }
 
 // BatchProcess processes multiple queries in batch
 func (r *RoyalSearchProcessor) BatchProcess(queries []string, searchContext string) ([]*RoyalSearchTerms, error) {
 	results := make([]*RoyalSearchTerms, len(queries))
-	
+
 	for i, query := range queries {
 		terms, err := r.GenerateSearchTerms(query, searchContext)
 		if err != nil {
@@ -492,7 +492,7 @@ func (r *RoyalSearchProcessor) BatchProcess(queries []string, searchContext stri
 			results[i] = terms
 		}
 	}
-	
+
 	return results, nil
 }
 
@@ -526,53 +526,53 @@ func (r *RoyalSearchProcessor) GetPromptTemplate() string {
 func RemoveJSONComments(jsonStr string) string {
 	var result strings.Builder
 	lines := strings.Split(jsonStr, "\n")
-	
+
 	for _, line := range lines {
 		processedLine := ""
 		inString := false
 		escaped := false
-		
+
 		// Process character by character to track if we're in a string
 		for i := 0; i < len(line); i++ {
 			ch := line[i]
-			
+
 			// Handle escape sequences
 			if escaped {
 				processedLine += string(ch)
 				escaped = false
 				continue
 			}
-			
+
 			// Check for escape character
 			if ch == '\\' && inString {
 				processedLine += string(ch)
 				escaped = true
 				continue
 			}
-			
+
 			// Toggle string state on unescaped quotes
 			if ch == '"' {
 				processedLine += string(ch)
 				inString = !inString
 				continue
 			}
-			
+
 			// Check for comment start when not in a string
 			if !inString && i+1 < len(line) && ch == '/' && line[i+1] == '/' {
 				// Found a comment outside of a string, stop processing this line
 				break
 			}
-			
+
 			// Add the character to the processed line
 			processedLine += string(ch)
 		}
-		
+
 		// Add the processed line to the result
 		if processedLine != "" || line == "" {
 			result.WriteString(processedLine)
 			result.WriteString("\n")
 		}
 	}
-	
+
 	return strings.TrimSpace(result.String())
 }

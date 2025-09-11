@@ -18,11 +18,11 @@ import (
 
 // UnstructuredExtractor handles extraction using the Unstructured service
 type UnstructuredExtractor struct {
-	apiURL        string
-	timeout       time.Duration
-	log           *logrus.Logger
+	apiURL         string
+	timeout        time.Duration
+	log            *logrus.Logger
 	royalProcessor *RoyalDocumentProcessor
-	httpClient    *http.Client
+	httpClient     *http.Client
 }
 
 // UnstructuredConfig represents configuration for the Unstructured service
@@ -109,10 +109,10 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 
 	duration := time.Since(startTime)
 	e.log.WithFields(logrus.Fields{
-		"file":     filePath,
-		"duration": duration,
-		"size":     len(response.Content),
-		"has_api_metadata": len(response.Metadata) > 0,
+		"file":               filePath,
+		"duration":           duration,
+		"size":               len(response.Content),
+		"has_api_metadata":   len(response.Metadata) > 0,
 		"api_metadata_count": len(response.Metadata),
 	}).Debug("Extraction completed")
 
@@ -147,10 +147,10 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 	}
 
 	e.log.WithFields(logrus.Fields{
-		"file": filePath,
-		"has_final_metadata": len(finalMetadata) > 0,
+		"file":                 filePath,
+		"has_final_metadata":   len(finalMetadata) > 0,
 		"final_metadata_count": len(finalMetadata),
-		"has_royal": royalMetadata != nil,
+		"has_royal":            royalMetadata != nil,
 	}).Debug("Returning extracted content with metadata")
 
 	return &ExtractedContent{
@@ -163,43 +163,43 @@ func (e *UnstructuredExtractor) isSupported(ext string) bool {
 	// Handle all formats that Unstructured.io supports
 	supportedTypes := map[string]bool{
 		// Document Formats
-		".pdf":  true,  // PDF documents
-		".docx": true,  // Microsoft Word
-		".doc":  true,  // Microsoft Word (older)
-		".pptx": true,  // PowerPoint
-		".ppt":  true,  // PowerPoint (older)
-		".html": true,  // HTML files
-		".htm":  true,  // HTML files
-		".xml":  true,  // XML files
-		".md":   true,  // Markdown
-		".rtf":  true,  // Rich Text Format
-		".odt":  true,  // OpenDocument Text
-		".epub": true,  // EPUB books
-		".org":  true,  // Org-mode files
-		".rst":  true,  // reStructuredText
+		".pdf":  true, // PDF documents
+		".docx": true, // Microsoft Word
+		".doc":  true, // Microsoft Word (older)
+		".pptx": true, // PowerPoint
+		".ppt":  true, // PowerPoint (older)
+		".html": true, // HTML files
+		".htm":  true, // HTML files
+		".xml":  true, // XML files
+		".md":   true, // Markdown
+		".rtf":  true, // Rich Text Format
+		".odt":  true, // OpenDocument Text
+		".epub": true, // EPUB books
+		".org":  true, // Org-mode files
+		".rst":  true, // reStructuredText
 
 		// Spreadsheet & Data Formats
-		".xlsx": true,  // Excel
-		".xls":  true,  // Excel (older)
-		".csv":  true,  // CSV files
-		".tsv":  true,  // TSV files
+		".xlsx": true, // Excel
+		".xls":  true, // Excel (older)
+		".csv":  true, // CSV files
+		".tsv":  true, // TSV files
 		// ".json": false, // JSON files - removed, handled by text/code extractors
 
 		// Email Formats
-		".eml": true,  // Email files
-		".msg": true,  // Outlook messages
+		".eml": true, // Email files
+		".msg": true, // Outlook messages
 
 		// Image Formats (with OCR)
-		".png":  true,  // PNG images
-		".jpg":  true,  // JPEG images
-		".jpeg": true,  // JPEG images
-		".tiff": true,  // TIFF images
-		".tif":  true,  // TIFF images
-		".bmp":  true,  // BMP images
-		".heic": true,  // HEIC images
+		".png":  true, // PNG images
+		".jpg":  true, // JPEG images
+		".jpeg": true, // JPEG images
+		".tiff": true, // TIFF images
+		".tif":  true, // TIFF images
+		".bmp":  true, // BMP images
+		".heic": true, // HEIC images
 
 		// Plain Text
-		".txt": true,  // Text files
+		".txt": true, // Text files
 	}
 
 	// Check both lowercase and uppercase extensions
@@ -317,10 +317,10 @@ func (e *UnstructuredExtractor) extractViaAPI(ctx context.Context, filePath stri
 
 	// Parse response
 	var apiResponse struct {
-		Success bool                   `json:"success"`
-		Content string                 `json:"content"`
+		Success  bool                   `json:"success"`
+		Content  string                 `json:"content"`
 		Metadata map[string]interface{} `json:"metadata"`
-		Error   string                 `json:"error,omitempty"`
+		Error    string                 `json:"error,omitempty"`
 	}
 
 	if err := json.Unmarshal(body, &apiResponse); err != nil {

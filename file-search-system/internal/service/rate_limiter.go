@@ -9,67 +9,67 @@ import (
 
 // RateLimiterConfig holds configuration for rate limiting
 type RateLimiterConfig struct {
-	IndexingRate   int           `json:"indexing_rate"`    // files per minute
-	EmbeddingRate  int           `json:"embedding_rate"`   // embeddings per minute
-	SearchRate     int           `json:"search_rate"`      // searches per minute
-	BurstSize      int           `json:"burst_size"`       // burst capacity
-	
+	IndexingRate  int `json:"indexing_rate"`  // files per minute
+	EmbeddingRate int `json:"embedding_rate"` // embeddings per minute
+	SearchRate    int `json:"search_rate"`    // searches per minute
+	BurstSize     int `json:"burst_size"`     // burst capacity
+
 	// Adaptive rate limiting
-	EnableAdaptive      bool    `json:"enable_adaptive"`
-	CPUThreshold        float64 `json:"cpu_threshold"`
-	MemoryThreshold     float64 `json:"memory_threshold"`
-	ReductionFactor     float64 `json:"reduction_factor"`     // Factor to reduce rate when under pressure
-	RecoveryFactor      float64 `json:"recovery_factor"`      // Factor to increase rate when recovering
-	
+	EnableAdaptive  bool    `json:"enable_adaptive"`
+	CPUThreshold    float64 `json:"cpu_threshold"`
+	MemoryThreshold float64 `json:"memory_threshold"`
+	ReductionFactor float64 `json:"reduction_factor"` // Factor to reduce rate when under pressure
+	RecoveryFactor  float64 `json:"recovery_factor"`  // Factor to increase rate when recovering
+
 	// Time-based rate limiting (e.g., slow down during business hours)
-	EnableTimeBased     bool `json:"enable_time_based"`
-	BusinessHourStart   int  `json:"business_hour_start"`   // 24-hour format
-	BusinessHourEnd     int  `json:"business_hour_end"`     // 24-hour format
-	BusinessHourFactor  float64 `json:"business_hour_factor"` // Rate reduction factor during business hours
+	EnableTimeBased    bool    `json:"enable_time_based"`
+	BusinessHourStart  int     `json:"business_hour_start"`  // 24-hour format
+	BusinessHourEnd    int     `json:"business_hour_end"`    // 24-hour format
+	BusinessHourFactor float64 `json:"business_hour_factor"` // Rate reduction factor during business hours
 }
 
 // RateLimiter provides rate limiting for various operations
 type RateLimiter struct {
 	config *RateLimiterConfig
-	
+
 	// Individual rate limiters
 	indexingLimiter  *rate.Limiter
 	embeddingLimiter *rate.Limiter
 	searchLimiter    *rate.Limiter
-	
+
 	// Statistics
 	stats     RateLimiterStats
 	statsLock sync.RWMutex
-	
+
 	// Adaptive rate limiting state
-	adaptiveLock    sync.RWMutex
-	currentFactor   float64
-	lastAdjustment  time.Time
-	
+	adaptiveLock   sync.RWMutex
+	currentFactor  float64
+	lastAdjustment time.Time
+
 	// Resource monitor reference for adaptive limiting
 	resourceMonitor *ResourceMonitor
 }
 
 // RateLimiterStats holds rate limiter statistics
 type RateLimiterStats struct {
-	IndexingRequests     int64   `json:"indexing_requests"`
-	IndexingAllowed      int64   `json:"indexing_allowed"`
-	IndexingBlocked      int64   `json:"indexing_blocked"`
-	IndexingRate         float64 `json:"indexing_rate"`       // current requests per second
-	
-	EmbeddingRequests    int64   `json:"embedding_requests"`
-	EmbeddingAllowed     int64   `json:"embedding_allowed"`
-	EmbeddingBlocked     int64   `json:"embedding_blocked"`
-	EmbeddingRate        float64 `json:"embedding_rate"`
-	
-	SearchRequests       int64   `json:"search_requests"`
-	SearchAllowed        int64   `json:"search_allowed"`
-	SearchBlocked        int64   `json:"search_blocked"`
-	SearchRate           float64 `json:"search_rate"`
-	
-	AdaptiveFactor       float64 `json:"adaptive_factor"`
-	TimeFactor           float64 `json:"time_factor"`
-	LastAdjustment       time.Time `json:"last_adjustment"`
+	IndexingRequests int64   `json:"indexing_requests"`
+	IndexingAllowed  int64   `json:"indexing_allowed"`
+	IndexingBlocked  int64   `json:"indexing_blocked"`
+	IndexingRate     float64 `json:"indexing_rate"` // current requests per second
+
+	EmbeddingRequests int64   `json:"embedding_requests"`
+	EmbeddingAllowed  int64   `json:"embedding_allowed"`
+	EmbeddingBlocked  int64   `json:"embedding_blocked"`
+	EmbeddingRate     float64 `json:"embedding_rate"`
+
+	SearchRequests int64   `json:"search_requests"`
+	SearchAllowed  int64   `json:"search_allowed"`
+	SearchBlocked  int64   `json:"search_blocked"`
+	SearchRate     float64 `json:"search_rate"`
+
+	AdaptiveFactor float64   `json:"adaptive_factor"`
+	TimeFactor     float64   `json:"time_factor"`
+	LastAdjustment time.Time `json:"last_adjustment"`
 }
 
 // NewRateLimiter creates a new rate limiter
@@ -102,15 +102,15 @@ func NewRateLimiter(config *RateLimiterConfig) *RateLimiter {
 	if config.BusinessHourEnd == 0 {
 		config.BusinessHourEnd = 17 // 5 PM
 	}
-	
+
 	rl := &RateLimiter{
 		config:        config,
 		currentFactor: 1.0,
 	}
-	
+
 	// Create rate limiters with initial rates
 	rl.updateRateLimiters()
-	
+
 	return rl
 }
 
@@ -124,9 +124,9 @@ func (rl *RateLimiter) AllowIndexing() bool {
 	rl.statsLock.Lock()
 	rl.stats.IndexingRequests++
 	rl.statsLock.Unlock()
-	
+
 	allowed := rl.indexingLimiter.Allow()
-	
+
 	rl.statsLock.Lock()
 	if allowed {
 		rl.stats.IndexingAllowed++
@@ -134,7 +134,7 @@ func (rl *RateLimiter) AllowIndexing() bool {
 		rl.stats.IndexingBlocked++
 	}
 	rl.statsLock.Unlock()
-	
+
 	return allowed
 }
 
@@ -143,9 +143,9 @@ func (rl *RateLimiter) AllowEmbedding() bool {
 	rl.statsLock.Lock()
 	rl.stats.EmbeddingRequests++
 	rl.statsLock.Unlock()
-	
+
 	allowed := rl.embeddingLimiter.Allow()
-	
+
 	rl.statsLock.Lock()
 	if allowed {
 		rl.stats.EmbeddingAllowed++
@@ -153,7 +153,7 @@ func (rl *RateLimiter) AllowEmbedding() bool {
 		rl.stats.EmbeddingBlocked++
 	}
 	rl.statsLock.Unlock()
-	
+
 	return allowed
 }
 
@@ -162,9 +162,9 @@ func (rl *RateLimiter) AllowSearch() bool {
 	rl.statsLock.Lock()
 	rl.stats.SearchRequests++
 	rl.statsLock.Unlock()
-	
+
 	allowed := rl.searchLimiter.Allow()
-	
+
 	rl.statsLock.Lock()
 	if allowed {
 		rl.stats.SearchAllowed++
@@ -172,7 +172,7 @@ func (rl *RateLimiter) AllowSearch() bool {
 		rl.stats.SearchBlocked++
 	}
 	rl.statsLock.Unlock()
-	
+
 	return allowed
 }
 
@@ -182,7 +182,7 @@ func (rl *RateLimiter) WaitForIndexing() {
 	rl.stats.IndexingRequests++
 	rl.stats.IndexingAllowed++
 	rl.statsLock.Unlock()
-	
+
 	rl.indexingLimiter.Wait(nil)
 }
 
@@ -192,7 +192,7 @@ func (rl *RateLimiter) WaitForEmbedding() {
 	rl.stats.EmbeddingRequests++
 	rl.stats.EmbeddingAllowed++
 	rl.statsLock.Unlock()
-	
+
 	rl.embeddingLimiter.Wait(nil)
 }
 
@@ -202,7 +202,7 @@ func (rl *RateLimiter) WaitForSearch() {
 	rl.stats.SearchRequests++
 	rl.stats.SearchAllowed++
 	rl.statsLock.Unlock()
-	
+
 	rl.searchLimiter.Wait(nil)
 }
 
@@ -210,20 +210,20 @@ func (rl *RateLimiter) WaitForSearch() {
 func (rl *RateLimiter) UpdateRates() {
 	rl.adaptiveLock.Lock()
 	defer rl.adaptiveLock.Unlock()
-	
+
 	oldFactor := rl.currentFactor
 	newFactor := rl.calculateAdaptiveFactor()
-	
+
 	// Apply time-based factor
 	timeFactor := rl.calculateTimeFactor()
 	newFactor *= timeFactor
-	
+
 	// Only update if there's a significant change
 	if abs(newFactor-oldFactor) > 0.05 {
 		rl.currentFactor = newFactor
 		rl.lastAdjustment = time.Now()
 		rl.updateRateLimiters()
-		
+
 		rl.statsLock.Lock()
 		rl.stats.AdaptiveFactor = rl.currentFactor
 		rl.stats.TimeFactor = timeFactor
@@ -237,13 +237,13 @@ func (rl *RateLimiter) calculateAdaptiveFactor() float64 {
 	if !rl.config.EnableAdaptive || rl.resourceMonitor == nil {
 		return 1.0
 	}
-	
+
 	usage := rl.resourceMonitor.GetCurrentUsage()
-	
+
 	// Check if we're under resource pressure
 	cpuPressure := usage.CPUPercent > rl.config.CPUThreshold
 	memoryPressure := usage.MemoryPercent > rl.config.MemoryThreshold
-	
+
 	if cpuPressure || memoryPressure {
 		// Reduce rate when under pressure
 		newFactor := rl.currentFactor * rl.config.ReductionFactor
@@ -265,26 +265,26 @@ func (rl *RateLimiter) calculateTimeFactor() float64 {
 	if !rl.config.EnableTimeBased {
 		return 1.0
 	}
-	
+
 	now := time.Now()
 	hour := now.Hour()
-	
+
 	// Check if we're in business hours
 	if hour >= rl.config.BusinessHourStart && hour < rl.config.BusinessHourEnd {
 		// During business hours, reduce the rate
 		return rl.config.BusinessHourFactor
 	}
-	
+
 	return 1.0
 }
 
 // updateRateLimiters updates the actual rate limiters with current factors
 func (rl *RateLimiter) updateRateLimiters() {
 	// Calculate effective rates
-	indexingRate := rate.Limit(float64(rl.config.IndexingRate) * rl.currentFactor / 60.0) // per second
+	indexingRate := rate.Limit(float64(rl.config.IndexingRate) * rl.currentFactor / 60.0)   // per second
 	embeddingRate := rate.Limit(float64(rl.config.EmbeddingRate) * rl.currentFactor / 60.0) // per second
-	searchRate := rate.Limit(float64(rl.config.SearchRate) * rl.currentFactor / 60.0) // per second
-	
+	searchRate := rate.Limit(float64(rl.config.SearchRate) * rl.currentFactor / 60.0)       // per second
+
 	// Create new rate limiters
 	rl.indexingLimiter = rate.NewLimiter(indexingRate, rl.config.BurstSize)
 	rl.embeddingLimiter = rate.NewLimiter(embeddingRate, rl.config.BurstSize)
@@ -295,10 +295,10 @@ func (rl *RateLimiter) updateRateLimiters() {
 func (rl *RateLimiter) GetStats() RateLimiterStats {
 	rl.statsLock.RLock()
 	defer rl.statsLock.RUnlock()
-	
+
 	// Calculate current rates (requests per second over last minute)
 	stats := rl.stats
-	
+
 	// Calculate rates based on recent activity
 	if rl.stats.IndexingRequests > 0 {
 		stats.IndexingRate = float64(rl.stats.IndexingAllowed) / 60.0 // approximate
@@ -309,7 +309,7 @@ func (rl *RateLimiter) GetStats() RateLimiterStats {
 	if rl.stats.SearchRequests > 0 {
 		stats.SearchRate = float64(rl.stats.SearchAllowed) / 60.0 // approximate
 	}
-	
+
 	return stats
 }
 
@@ -317,7 +317,7 @@ func (rl *RateLimiter) GetStats() RateLimiterStats {
 func (rl *RateLimiter) ResetStats() {
 	rl.statsLock.Lock()
 	defer rl.statsLock.Unlock()
-	
+
 	rl.stats = RateLimiterStats{
 		AdaptiveFactor: rl.currentFactor,
 		LastAdjustment: rl.lastAdjustment,
@@ -328,7 +328,7 @@ func (rl *RateLimiter) ResetStats() {
 func (rl *RateLimiter) GetCurrentRates() map[string]float64 {
 	rl.adaptiveLock.RLock()
 	defer rl.adaptiveLock.RUnlock()
-	
+
 	return map[string]float64{
 		"indexing_per_minute":  float64(rl.config.IndexingRate) * rl.currentFactor,
 		"embedding_per_minute": float64(rl.config.EmbeddingRate) * rl.currentFactor,
@@ -341,11 +341,11 @@ func (rl *RateLimiter) GetCurrentRates() map[string]float64 {
 func (rl *RateLimiter) SetRates(indexingRate, embeddingRate, searchRate int) {
 	rl.adaptiveLock.Lock()
 	defer rl.adaptiveLock.Unlock()
-	
+
 	rl.config.IndexingRate = indexingRate
 	rl.config.EmbeddingRate = embeddingRate
 	rl.config.SearchRate = searchRate
-	
+
 	rl.updateRateLimiters()
 }
 
@@ -353,7 +353,7 @@ func (rl *RateLimiter) SetRates(indexingRate, embeddingRate, searchRate int) {
 func (rl *RateLimiter) Pause() {
 	rl.adaptiveLock.Lock()
 	defer rl.adaptiveLock.Unlock()
-	
+
 	rl.indexingLimiter = rate.NewLimiter(0, 0)
 	rl.embeddingLimiter = rate.NewLimiter(0, 0)
 	// Don't pause search limiter - searches should always be allowed
@@ -363,22 +363,22 @@ func (rl *RateLimiter) Pause() {
 func (rl *RateLimiter) Resume() {
 	rl.adaptiveLock.Lock()
 	defer rl.adaptiveLock.Unlock()
-	
+
 	rl.updateRateLimiters()
 }
 
 // IsHealthy checks if the rate limiter is operating within normal parameters
 func (rl *RateLimiter) IsHealthy() bool {
 	stats := rl.GetStats()
-	
+
 	// Check if blocking rate is too high (more than 50% blocked)
 	indexingBlockRate := float64(stats.IndexingBlocked) / float64(stats.IndexingRequests)
 	embeddingBlockRate := float64(stats.EmbeddingBlocked) / float64(stats.EmbeddingRequests)
-	
+
 	if indexingBlockRate > 0.5 || embeddingBlockRate > 0.5 {
 		return false
 	}
-	
+
 	return true
 }
 

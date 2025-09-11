@@ -22,10 +22,10 @@ type Chunk struct {
 
 // Config holds configuration for chunking
 type Config struct {
-	ChunkSize    int     `json:"chunk_size"`     // Target chunk size in tokens/characters
-	ChunkOverlap int     `json:"chunk_overlap"`  // Overlap between chunks
-	MaxChunkSize int     `json:"max_chunk_size"` // Maximum chunk size
-	MinChunkSize int     `json:"min_chunk_size"` // Minimum chunk size
+	ChunkSize        int  `json:"chunk_size"`     // Target chunk size in tokens/characters
+	ChunkOverlap     int  `json:"chunk_overlap"`  // Overlap between chunks
+	MaxChunkSize     int  `json:"max_chunk_size"` // Maximum chunk size
+	MinChunkSize     int  `json:"min_chunk_size"` // Minimum chunk size
 	SplitOnSentences bool `json:"split_on_sentences"`
 }
 
@@ -58,14 +58,14 @@ func NewManager(config *Config) *Manager {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
+
 	chunkers := make(map[string]Chunker)
-	
+
 	// Add default chunkers
 	chunkers["semantic"] = NewSemanticChunker()
 	chunkers["sliding"] = NewSlidingWindowChunker()
 	chunkers["code"] = NewCodeChunker()
-	
+
 	return &Manager{
 		chunkers: chunkers,
 		config:   config,
@@ -79,7 +79,7 @@ func (cm *Manager) ChunkContent(content *extractor.ExtractedContent, fileType st
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Enforce size limits to prevent PostgreSQL tsvector errors
 	return cm.enforceSizeLimits(chunks), nil
 }
@@ -88,7 +88,7 @@ func (cm *Manager) ChunkContent(content *extractor.ExtractedContent, fileType st
 func (cm *Manager) selectChunker(fileType string, content *extractor.ExtractedContent) Chunker {
 	// Priority order for chunker selection
 	chunkerOrder := []string{"code", "semantic", "sliding"}
-	
+
 	for _, name := range chunkerOrder {
 		if chunker, exists := cm.chunkers[name]; exists {
 			if chunker.SupportsFileType(fileType) {
@@ -96,7 +96,7 @@ func (cm *Manager) selectChunker(fileType string, content *extractor.ExtractedCo
 			}
 		}
 	}
-	
+
 	// Default to sliding window
 	return cm.chunkers["sliding"]
 }
@@ -110,12 +110,12 @@ func (cm *Manager) AddChunker(name string, chunker Chunker) {
 func (cm *Manager) enforceSizeLimits(chunks []Chunk) []Chunk {
 	const MaxPostgreSQLTsvectorBytes = 1048575 // PostgreSQL tsvector limit
 	const SafeChunkSizeBytes = 800000          // Safe limit well below PostgreSQL maximum
-	
+
 	var result []Chunk
-	
+
 	for _, chunk := range chunks {
 		chunkSize := len([]byte(chunk.Content))
-		
+
 		// If chunk is within safe limits, keep it as-is
 		if chunkSize <= SafeChunkSizeBytes {
 			// Skip empty chunks
@@ -124,12 +124,12 @@ func (cm *Manager) enforceSizeLimits(chunks []Chunk) []Chunk {
 			}
 			continue
 		}
-		
+
 		// Split oversized chunk into smaller pieces
 		subChunks := cm.splitOversizedChunk(chunk, SafeChunkSizeBytes)
 		result = append(result, subChunks...)
 	}
-	
+
 	return result
 }
 
@@ -137,19 +137,19 @@ func (cm *Manager) enforceSizeLimits(chunks []Chunk) []Chunk {
 func (cm *Manager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
 	content := chunk.Content
 	var subChunks []Chunk
-	
+
 	// Try to split on paragraph boundaries first
 	paragraphs := strings.Split(content, "\n\n")
 	currentChunk := ""
 	chunkIndex := 0
-	
+
 	for _, paragraph := range paragraphs {
 		testChunk := currentChunk
 		if testChunk != "" {
 			testChunk += "\n\n"
 		}
 		testChunk += paragraph
-		
+
 		// If adding this paragraph would exceed limit, save current chunk and start new one
 		if len([]byte(testChunk)) > maxSize && currentChunk != "" {
 			if strings.TrimSpace(currentChunk) != "" {
@@ -168,7 +168,7 @@ func (cm *Manager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
 			currentChunk = testChunk
 		}
 	}
-	
+
 	// Add the last chunk
 	if strings.TrimSpace(currentChunk) != "" {
 		subChunks = append(subChunks, Chunk{
@@ -180,7 +180,7 @@ func (cm *Manager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
 			Metadata:  chunk.Metadata,
 		})
 	}
-	
+
 	// If we still have oversized chunks, split by sentences
 	var finalChunks []Chunk
 	for _, subChunk := range subChunks {
@@ -190,7 +190,7 @@ func (cm *Manager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
 			finalChunks = append(finalChunks, subChunk)
 		}
 	}
-	
+
 	return finalChunks
 }
 
@@ -198,32 +198,32 @@ func (cm *Manager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
 func (cm *Manager) splitBySentences(chunk Chunk, maxSize int) []Chunk {
 	content := chunk.Content
 	var subChunks []Chunk
-	
+
 	// Split by sentence-ending punctuation
 	sentences := strings.FieldsFunc(content, func(r rune) bool {
 		return r == '.' || r == '!' || r == '?'
 	})
-	
+
 	currentChunk := ""
 	chunkIndex := 0
-	
+
 	for i, sentence := range sentences {
 		sentence = strings.TrimSpace(sentence)
 		if sentence == "" {
 			continue
 		}
-		
+
 		// Add punctuation back (except for last sentence)
 		if i < len(sentences)-1 {
 			sentence += "."
 		}
-		
+
 		testChunk := currentChunk
 		if testChunk != "" {
 			testChunk += " "
 		}
 		testChunk += sentence
-		
+
 		// If adding this sentence would exceed limit, save current chunk
 		if len([]byte(testChunk)) > maxSize && currentChunk != "" {
 			subChunks = append(subChunks, Chunk{
@@ -240,7 +240,7 @@ func (cm *Manager) splitBySentences(chunk Chunk, maxSize int) []Chunk {
 			currentChunk = testChunk
 		}
 	}
-	
+
 	// Add the last chunk
 	if strings.TrimSpace(currentChunk) != "" {
 		subChunks = append(subChunks, Chunk{
@@ -252,7 +252,7 @@ func (cm *Manager) splitBySentences(chunk Chunk, maxSize int) []Chunk {
 			Metadata:  chunk.Metadata,
 		})
 	}
-	
+
 	return subChunks
 }
 
@@ -269,11 +269,11 @@ func splitIntoSentences(text string) []string {
 	// Simple sentence splitting on common punctuation
 	sentences := []string{}
 	current := strings.Builder{}
-	
+
 	runes := []rune(text)
 	for i, r := range runes {
 		current.WriteRune(r)
-		
+
 		// Check for sentence endings
 		if r == '.' || r == '!' || r == '?' {
 			// Look ahead to see if this is actually end of sentence
@@ -298,12 +298,12 @@ func splitIntoSentences(text string) []string {
 			}
 		}
 	}
-	
+
 	// Add remaining text
 	if current.Len() > 0 {
 		sentences = append(sentences, strings.TrimSpace(current.String()))
 	}
-	
+
 	return sentences
 }
 
@@ -311,14 +311,14 @@ func splitIntoSentences(text string) []string {
 func splitIntoParagraphs(text string) []string {
 	paragraphs := strings.Split(text, "\n\n")
 	result := make([]string, 0, len(paragraphs))
-	
+
 	for _, p := range paragraphs {
 		trimmed := strings.TrimSpace(p)
 		if trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
-	
+
 	return result
 }
 
@@ -337,14 +337,14 @@ func trimToWordBoundary(text string, maxLen int) string {
 	if len(text) <= maxLen {
 		return text
 	}
-	
+
 	// Find last space within limit
 	for i := maxLen - 1; i >= 0; i-- {
 		if text[i] == ' ' || text[i] == '\n' || text[i] == '\t' {
 			return strings.TrimSpace(text[:i])
 		}
 	}
-	
+
 	// If no word boundary found, cut at limit
 	return text[:maxLen]
 }
@@ -354,9 +354,9 @@ func findOverlapPosition(text string, targetOverlap int) int {
 	if len(text) <= targetOverlap {
 		return 0
 	}
-	
+
 	start := len(text) - targetOverlap
-	
+
 	// Try to find a sentence boundary
 	for i := start; i < len(text); i++ {
 		if text[i] == '.' || text[i] == '!' || text[i] == '?' {
@@ -365,41 +365,41 @@ func findOverlapPosition(text string, targetOverlap int) int {
 			}
 		}
 	}
-	
+
 	// Try to find a word boundary
 	for i := start; i < len(text); i++ {
 		if text[i] == ' ' || text[i] == '\n' || text[i] == '\t' {
 			return i + 1
 		}
 	}
-	
+
 	return start
 }
 
 // calculateCharPositions calculates character positions within original text
 func calculateCharPositions(originalText string, chunks []Chunk) []Chunk {
 	currentPos := 0
-	
+
 	for i := range chunks {
 		chunks[i].StartChar = currentPos
 		chunks[i].EndChar = currentPos + len(chunks[i].Content)
 		currentPos = chunks[i].EndChar
 	}
-	
+
 	return chunks
 }
 
 // calculateLineNumbers calculates line numbers for chunks
 func calculateLineNumbers(originalText string, chunks []Chunk) []Chunk {
-	
+
 	for i := range chunks {
 		// Simple line calculation based on character position
 		textUpToStart := originalText[:chunks[i].StartChar]
 		chunks[i].StartLine = strings.Count(textUpToStart, "\n") + 1
-		
+
 		textUpToEnd := originalText[:chunks[i].EndChar]
 		chunks[i].EndLine = strings.Count(textUpToEnd, "\n") + 1
 	}
-	
+
 	return chunks
 }

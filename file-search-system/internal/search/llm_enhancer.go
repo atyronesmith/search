@@ -8,48 +8,48 @@ import (
 	"strings"
 	"sync"
 	"time"
-	
+
 	"github.com/file-search/file-search-system/internal/database"
 	"github.com/sirupsen/logrus"
 )
 
 // DebugInfo captures LLM interaction details for debugging
 type DebugInfo struct {
-	Timestamp    string `json:"timestamp"`
-	Query        string `json:"query"`
-	Model        string `json:"model"`
-	Prompt       string `json:"prompt"`
-	Response     string `json:"response"`
-	ProcessTime  int64  `json:"process_time_ms"`
-	Error        string `json:"error,omitempty"`
-	VectorQuery  string `json:"vector_query,omitempty"`
-	TextQuery    string `json:"text_query,omitempty"`
+	Timestamp   string `json:"timestamp"`
+	Query       string `json:"query"`
+	Model       string `json:"model"`
+	Prompt      string `json:"prompt"`
+	Response    string `json:"response"`
+	ProcessTime int64  `json:"process_time_ms"`
+	Error       string `json:"error,omitempty"`
+	VectorQuery string `json:"vector_query,omitempty"`
+	TextQuery   string `json:"text_query,omitempty"`
 }
 
 // LLMEnhancer provides intelligent query enhancement using LLM
 type LLMEnhancer struct {
-	ollamaClient    *OllamaClient
-	royalProcessor  *RoyalSearchProcessor
-	enabled         bool
-	modelName       string
-	lastDebugInfo   *DebugInfo
-	log             *logrus.Logger
-	
+	ollamaClient   *OllamaClient
+	royalProcessor *RoyalSearchProcessor
+	enabled        bool
+	modelName      string
+	lastDebugInfo  *DebugInfo
+	log            *logrus.Logger
+
 	// Phase 5: Query optimization cache
 	classificationCache sync.Map // map[string]*QueryClassification
-	cacheStats         struct {
+	cacheStats          struct {
 		hits   int64
 		misses int64
 		mutex  sync.RWMutex
 	}
-	
+
 	// Phase 6: Performance monitoring
 	performanceMetrics struct {
-		totalQueries       int64
+		totalQueries      int64
 		llmQueries        int64
 		directQueries     int64
 		avgClassifyTimeMs float64
-		mutex            sync.RWMutex
+		mutex             sync.RWMutex
 	}
 }
 
@@ -62,19 +62,19 @@ func NewLLMEnhancer(ollamaURL string, modelName string, db *database.DB) *LLMEnh
 		modelName:      modelName,
 		log:            logrus.New(),
 	}
-	
+
 	// TEMP: Skip model check for now to test UI functionality
 	// The model check is disabling the LLM enhancer during initialization
 	// TODO: Fix the model check to work properly
-	
+
 	// Ensure phi3:mini model is available on startup (quick check)
 	// ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	// defer cancel()
-	
+
 	// if err := enhancer.ollamaClient.EnsureModel(ctx, "phi3:mini"); err != nil {
 	// 	enhancer.enabled = false
 	// }
-	
+
 	return enhancer
 }
 
@@ -136,50 +136,50 @@ type QueryClassification struct {
 
 // QueryAnalysis represents the structural analysis of a query
 type QueryAnalysis struct {
-	HasExactPhrases  bool   `json:"has_exact_phrases"`   // Contains "quoted phrases"
-	HasFileTypes     bool   `json:"has_file_types"`      // Contains type:pdf or filetype:code
-	HasDateFilters   bool   `json:"has_date_filters"`    // Contains after: or before: dates
-	HasBooleanOps    bool   `json:"has_boolean_ops"`     // Contains AND, OR, NOT
-	HasFieldFilters  bool   `json:"has_field_filters"`   // Contains field:value filters
-	RemainingText    string `json:"remaining_text"`      // Text after removing simple elements
-	IsValidSimple    bool   `json:"is_valid_simple"`     // Whether simple syntax is valid
-	ValidationError  string `json:"validation_error"`    // Specific validation error if any
-	ExtractedPhrases []string `json:"extracted_phrases"`  // Exact phrases found
-	ExtractedTypes   []string `json:"extracted_types"`    // File types found
-	ExtractedDates   []string `json:"extracted_dates"`    // Date filters found
+	HasExactPhrases  bool     `json:"has_exact_phrases"` // Contains "quoted phrases"
+	HasFileTypes     bool     `json:"has_file_types"`    // Contains type:pdf or filetype:code
+	HasDateFilters   bool     `json:"has_date_filters"`  // Contains after: or before: dates
+	HasBooleanOps    bool     `json:"has_boolean_ops"`   // Contains AND, OR, NOT
+	HasFieldFilters  bool     `json:"has_field_filters"` // Contains field:value filters
+	RemainingText    string   `json:"remaining_text"`    // Text after removing simple elements
+	IsValidSimple    bool     `json:"is_valid_simple"`   // Whether simple syntax is valid
+	ValidationError  string   `json:"validation_error"`  // Specific validation error if any
+	ExtractedPhrases []string `json:"extracted_phrases"` // Exact phrases found
+	ExtractedTypes   []string `json:"extracted_types"`   // File types found
+	ExtractedDates   []string `json:"extracted_dates"`   // Date filters found
 }
 
 // EnhancedQuery represents an LLM-enhanced query
 type EnhancedQuery struct {
-	Original        string            `json:"original"`
-	Enhanced        string            `json:"enhanced"`
-	SearchTerms     []string          `json:"search_terms"`
-	VectorTerms     []string          `json:"vector_terms"`      // For vector similarity search
-	PgTsQuery       string            `json:"pg_tsquery"`         // PostgreSQL full-text search query
-	ContentFilters  []ContentFilter   `json:"content_filters"`
-	MetadataFilters []MetadataFilter  `json:"metadata_filters"`
-	Intent          string            `json:"intent"`
-	RequiresCount   bool              `json:"requires_count"`
-	SearchStrategy  string            `json:"search_strategy"`    // Description of search approach
+	Original        string           `json:"original"`
+	Enhanced        string           `json:"enhanced"`
+	SearchTerms     []string         `json:"search_terms"`
+	VectorTerms     []string         `json:"vector_terms"` // For vector similarity search
+	PgTsQuery       string           `json:"pg_tsquery"`   // PostgreSQL full-text search query
+	ContentFilters  []ContentFilter  `json:"content_filters"`
+	MetadataFilters []MetadataFilter `json:"metadata_filters"`
+	Intent          string           `json:"intent"`
+	RequiresCount   bool             `json:"requires_count"`
+	SearchStrategy  string           `json:"search_strategy"` // Description of search approach
 }
 
 // ContentFilter represents semantic content filtering
 type ContentFilter struct {
-	Type        string  `json:"type"`        // "contains", "pattern", "semantic"
-	Description string  `json:"description"` // Human description
-	Pattern     string  `json:"pattern"`     // Regex pattern if applicable
-	Keywords    []string `json:"keywords"`   // Keywords for semantic search
-	Confidence  float64 `json:"confidence"`
+	Type        string   `json:"type"`        // "contains", "pattern", "semantic"
+	Description string   `json:"description"` // Human description
+	Pattern     string   `json:"pattern"`     // Regex pattern if applicable
+	Keywords    []string `json:"keywords"`    // Keywords for semantic search
+	Confidence  float64  `json:"confidence"`
 }
 
 // MetadataFilter represents file metadata filtering
 type MetadataFilter struct {
-	Field       string      `json:"field"`         // "type", "size", "created_date", "modified_date", "name"
-	Operator    string      `json:"operator"`      // "equals", "contains", "greater", "less", "between"
-	Value       interface{} `json:"value"`
-	StartDate   *time.Time  `json:"start_date,omitempty"`
-	EndDate     *time.Time  `json:"end_date,omitempty"`
-	DateField   string      `json:"date_field,omitempty"` // "created_at", "modified_at" - specifies which date column to filter on
+	Field     string      `json:"field"`    // "type", "size", "created_date", "modified_date", "name"
+	Operator  string      `json:"operator"` // "equals", "contains", "greater", "less", "between"
+	Value     interface{} `json:"value"`
+	StartDate *time.Time  `json:"start_date,omitempty"`
+	EndDate   *time.Time  `json:"end_date,omitempty"`
+	DateField string      `json:"date_field,omitempty"` // "created_at", "modified_at" - specifies which date column to filter on
 }
 
 // ClassifyQuery determines if a query needs LLM enhancement
@@ -189,7 +189,7 @@ func (e *LLMEnhancer) ClassifyQuery(query string) (*QueryClassification, error) 
 	defer func() {
 		e.recordQueryMetrics(time.Since(start).Milliseconds())
 	}()
-	
+
 	if !e.enabled {
 		return &QueryClassification{
 			NeedsLLM:   false,
@@ -210,14 +210,14 @@ func (e *LLMEnhancer) ClassifyQuery(query string) (*QueryClassification, error) 
 
 	// Quick classification based on patterns
 	classification := e.quickClassify(query)
-	
+
 	// TEMP DEBUG: Force certain queries to be treated as needing LLM
 	if strings.Contains(strings.ToLower(query), "find files that contain") {
 		classification.NeedsLLM = true
 		classification.QueryType = "analytical"
 		classification.Reasoning = "DEBUG: Forced LLM enhancement for testing"
 	}
-	
+
 	// If quick classification suggests complexity, use LLM for detailed analysis
 	if classification.NeedsLLM {
 		e.recordLLMQuery()
@@ -229,9 +229,8 @@ func (e *LLMEnhancer) ClassifyQuery(query string) (*QueryClassification, error) 
 		}
 		e.storeInCache(cacheKey, enhanced)
 		return enhanced, nil
-	} else {
-		e.recordDirectQuery()
 	}
+	e.recordDirectQuery()
 
 	e.storeInCache(cacheKey, classification)
 	return classification, nil
@@ -244,9 +243,9 @@ func (e *LLMEnhancer) analyzeQueryStructure(query string) *QueryAnalysis {
 		ExtractedTypes:   []string{},
 		ExtractedDates:   []string{},
 	}
-	
+
 	simplified := query
-	
+
 	// Check and extract exact phrases (quoted strings)
 	exactPhrasePattern := regexp.MustCompile(`"([^"]*)"`)
 	phraseMatches := exactPhrasePattern.FindAllStringSubmatch(simplified, -1)
@@ -259,7 +258,7 @@ func (e *LLMEnhancer) analyzeQueryStructure(query string) *QueryAnalysis {
 		}
 		simplified = exactPhrasePattern.ReplaceAllString(simplified, " ")
 	}
-	
+
 	// Check and extract file type filters
 	fileTypePattern := regexp.MustCompile(`\b(?i)(type|filetype):(\w+)\b`)
 	typeMatches := fileTypePattern.FindAllStringSubmatch(simplified, -1)
@@ -272,7 +271,7 @@ func (e *LLMEnhancer) analyzeQueryStructure(query string) *QueryAnalysis {
 		}
 		simplified = fileTypePattern.ReplaceAllString(simplified, " ")
 	}
-	
+
 	// Check and extract date filters
 	datePattern := regexp.MustCompile(`\b(?i)(after|before):(\d{4}-\d{2}-\d{2})\b`)
 	dateMatches := datePattern.FindAllStringSubmatch(simplified, -1)
@@ -285,28 +284,28 @@ func (e *LLMEnhancer) analyzeQueryStructure(query string) *QueryAnalysis {
 		}
 		simplified = datePattern.ReplaceAllString(simplified, " ")
 	}
-	
+
 	// Check for boolean operators
 	booleanPattern := regexp.MustCompile(`\b(AND|OR|NOT)\b`)
 	if booleanPattern.MatchString(simplified) {
 		analysis.HasBooleanOps = true
 		simplified = booleanPattern.ReplaceAllString(simplified, " ")
 	}
-	
+
 	// Check for field filters (e.g., author:john, size:>10MB)
 	fieldPattern := regexp.MustCompile(`\b(\w+):[<>]?[\w\d]+\b`)
 	if fieldPattern.MatchString(simplified) {
 		analysis.HasFieldFilters = true
 		simplified = fieldPattern.ReplaceAllString(simplified, " ")
 	}
-	
+
 	// Clean up remaining text
 	simplified = strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(simplified, " "))
 	analysis.RemainingText = simplified
-	
+
 	// Validate the simple query syntax
 	analysis.IsValidSimple, analysis.ValidationError = e.validateSimpleQuery(query, analysis)
-	
+
 	return analysis
 }
 
@@ -322,18 +321,18 @@ func (e *LLMEnhancer) isSimpleBooleanQuery(query string) bool {
 	// Remove boolean operators and check what's left
 	simplified := regexp.MustCompile(`(?i)\s+(OR|AND|NOT)\s+`).ReplaceAllString(query, " ")
 	simplified = strings.TrimSpace(simplified)
-	
+
 	// Check if remaining terms are just simple words (no complex patterns)
 	// Allow basic words, numbers, and common search terms
 	if matched, _ := regexp.MatchString(`^[\w\s\-_\.]+$`, simplified); !matched {
 		return false
 	}
-	
+
 	// Make sure there's at least one boolean operator
 	hasOr := regexp.MustCompile(`(?i)\s+OR\s+`).MatchString(query)
 	hasAnd := regexp.MustCompile(`(?i)\s+AND\s+`).MatchString(query)
 	hasNot := regexp.MustCompile(`(?i)\s+NOT\s+`).MatchString(query)
-	
+
 	return hasOr || hasAnd || hasNot
 }
 
@@ -344,7 +343,7 @@ func (e *LLMEnhancer) validateSimpleQuery(query string, analysis *QueryAnalysis)
 	if quoteCount%2 != 0 {
 		return false, "Unmatched quotes in query"
 	}
-	
+
 	// Validate date formats if present
 	if analysis.HasDateFilters {
 		for _, dateStr := range analysis.ExtractedDates {
@@ -358,7 +357,7 @@ func (e *LLMEnhancer) validateSimpleQuery(query string, analysis *QueryAnalysis)
 			}
 		}
 	}
-	
+
 	// Validate file types if present
 	if analysis.HasFileTypes {
 		validTypes := map[string]bool{
@@ -374,7 +373,7 @@ func (e *LLMEnhancer) validateSimpleQuery(query string, analysis *QueryAnalysis)
 			}
 		}
 	}
-	
+
 	// Check for orphaned boolean operators
 	if analysis.HasBooleanOps {
 		orphanedOp := regexp.MustCompile(`(?:^|\s)(AND|OR|NOT)(?:\s|$)`)
@@ -382,7 +381,7 @@ func (e *LLMEnhancer) validateSimpleQuery(query string, analysis *QueryAnalysis)
 			return false, "Boolean operator missing operands"
 		}
 	}
-	
+
 	return true, ""
 }
 
@@ -390,12 +389,12 @@ func (e *LLMEnhancer) validateSimpleQuery(query string, analysis *QueryAnalysis)
 func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 	originalQuery := strings.TrimSpace(query)
 	queryLower := strings.ToLower(originalQuery)
-	
+
 	fmt.Printf("DEBUG quickClassify: query='%s'\n", queryLower)
-	
+
 	// First, analyze the query structure
 	analysis := e.analyzeQueryStructure(originalQuery)
-	
+
 	// If query has invalid simple syntax, route to LLM for correction
 	if !analysis.IsValidSimple && analysis.ValidationError != "" {
 		return &QueryClassification{
@@ -409,7 +408,7 @@ func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 			Suggestion:      "LLM should attempt to correct syntax errors",
 		}
 	}
-	
+
 	// Phase 3: Enhanced Natural Language Detection
 	// Check for questions first (highest priority)
 	if strings.HasSuffix(strings.TrimSpace(queryLower), "?") {
@@ -421,7 +420,7 @@ func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 			Reasoning:  "Question mark detected - natural language query",
 		}
 	}
-	
+
 	// Check if it's a pure simple boolean query (e.g., "taxi OR credit")
 	if analysis.HasBooleanOps && e.isSimpleBooleanQuery(originalQuery) {
 		return &QueryClassification{
@@ -432,12 +431,12 @@ func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 			Reasoning:  "Simple boolean query with OR/AND/NOT operators",
 		}
 	}
-	
+
 	// Check if it's a pure simple query (only simple elements with basic keywords)
-	hasSimpleElements := analysis.HasExactPhrases || analysis.HasFileTypes || 
-	                    analysis.HasDateFilters || analysis.HasBooleanOps || 
-	                    analysis.HasFieldFilters
-	
+	hasSimpleElements := analysis.HasExactPhrases || analysis.HasFileTypes ||
+		analysis.HasDateFilters || analysis.HasBooleanOps ||
+		analysis.HasFieldFilters
+
 	if hasSimpleElements && (analysis.RemainingText == "" || isSimpleKeywords(analysis.RemainingText)) {
 		// It's a valid simple query
 		return &QueryClassification{
@@ -448,7 +447,7 @@ func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 			Reasoning:  "Valid simple search syntax with no complex language",
 		}
 	}
-	
+
 	// Check if it's a hybrid query (mix of simple and complex)
 	if hasSimpleElements && analysis.RemainingText != "" && !isSimpleKeywords(analysis.RemainingText) {
 		return &QueryClassification{
@@ -461,10 +460,10 @@ func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 			Suggestion: "LLM should preserve simple syntax elements where possible",
 		}
 	}
-	
+
 	// Check for analytical patterns FIRST before simple patterns
 	// This ensures complex queries aren't misclassified as simple
-	
+
 	// Analytical queries
 	analyticalPatterns := []string{
 		`\b(find|show|list|count|how many)\b.*\b(that|with|containing|have)\b`,
@@ -498,15 +497,15 @@ func (e *LLMEnhancer) quickClassify(query string) *QueryClassification {
 			}
 		}
 	}
-	
+
 	// Simple keyword searches - no LLM needed
 	// Only check these AFTER checking for complex patterns
 	simplePatterns := []string{
 		`^[a-zA-Z0-9\s\-_\.]+$`, // Just alphanumeric and basic chars
-		`^"[^"]*"$`,              // Simple quoted phrase
-		`^\w+:\w+$`,              // Simple filter like type:pdf
+		`^"[^"]*"$`,             // Simple quoted phrase
+		`^\w+:\w+$`,             // Simple filter like type:pdf
 	}
-	
+
 	for _, pattern := range simplePatterns {
 		if matched, _ := regexp.MatchString(pattern, queryLower); matched && !e.hasComplexTerms(queryLower) {
 			fmt.Printf("DEBUG: Query matches simple pattern '%s' - NOT using LLM\n", pattern)
@@ -587,36 +586,36 @@ func (e *LLMEnhancer) findComplexTerms(query string) []string {
 
 	var found []string
 	queryLower := strings.ToLower(query)
-	
+
 	for _, term := range complexTerms {
 		if strings.Contains(queryLower, term) {
 			found = append(found, term)
 		}
 	}
-	
+
 	return found
 }
 
 // detectIntent determines the primary intent of the query
 func (e *LLMEnhancer) detectIntent(query string) string {
 	query = strings.ToLower(query)
-	
+
 	if strings.Contains(query, "how many") || strings.Contains(query, "count") {
 		return "count"
 	}
-	
+
 	if strings.Contains(query, "find") || strings.Contains(query, "search") || strings.Contains(query, "show") {
 		return "search"
 	}
-	
+
 	if strings.Contains(query, "analyze") || strings.Contains(query, "analysis") {
 		return "analysis"
 	}
-	
+
 	if strings.Contains(query, "filter") || strings.Contains(query, "type:") || strings.Contains(query, "where") {
 		return "filter"
 	}
-	
+
 	return "search"
 }
 
@@ -624,14 +623,14 @@ func (e *LLMEnhancer) detectIntent(query string) string {
 func (e *LLMEnhancer) llmClassify(query string) (*QueryClassification, error) {
 	// For now, skip the complex LLM classification and just return a simple classification
 	// This avoids the JSON parsing issues while we focus on fixing the search terms generation
-	
+
 	return &QueryClassification{
-		NeedsLLM:   true,
-		QueryType:  "analytical",
-		Intent:     e.detectIntent(query),
-		Confidence: 0.8,
+		NeedsLLM:     true,
+		QueryType:    "analytical",
+		Intent:       e.detectIntent(query),
+		Confidence:   0.8,
 		ComplexTerms: e.findComplexTerms(query),
-		Reasoning:  "Simplified classification to avoid JSON parsing issues",
+		Reasoning:    "Simplified classification to avoid JSON parsing issues",
 	}, nil
 }
 
@@ -658,14 +657,14 @@ func (e *LLMEnhancer) EnhanceQuery(query string, classification *QueryClassifica
 func (e *LLMEnhancer) llmEnhance(query string, classification *QueryClassification) (*EnhancedQuery, error) {
 	// Use the royal processor for comprehensive search term extraction
 	searchContext := fmt.Sprintf("Query type: %s, Intent: %s", classification.QueryType, classification.Intent)
-	
+
 	fmt.Printf("DEBUG: Using royal processor for query: %s\n", query)
-	
+
 	// Create debug callback to capture LLM interaction
 	debugCallback := func(prompt, response, errorMsg string, processTime int64) {
 		e.setDebugInfo(query, prompt, response, errorMsg, processTime)
 	}
-	
+
 	royalTerms, err := e.royalProcessor.GenerateSearchTermsWithDebug(query, searchContext, debugCallback)
 	if err != nil {
 		fmt.Printf("DEBUG: Royal processor failed: %v, falling back to legacy\n", err)
@@ -678,8 +677,8 @@ func (e *LLMEnhancer) llmEnhance(query string, classification *QueryClassificati
 		// Fall back to the old method if royal processor fails
 		return e.llmEnhanceLegacy(query, classification)
 	}
-	
-	fmt.Printf("DEBUG: Royal processor generated - Vector: %v, Text: %v, TsQuery: %s\n", 
+
+	fmt.Printf("DEBUG: Royal processor generated - Vector: %v, Text: %v, TsQuery: %s\n",
 		royalTerms.VectorTerms, royalTerms.TextTerms, royalTerms.PgTsQuery)
 
 	// Construct the enhanced query from royal terms
@@ -706,10 +705,10 @@ func (e *LLMEnhancer) llmEnhance(query string, classification *QueryClassificati
 // llmEnhanceLegacyWithResponse uses the old parsing method with an existing LLM response
 func (e *LLMEnhancer) llmEnhanceLegacyWithResponse(query string, classification *QueryClassification, rawResponse string) (*EnhancedQuery, error) {
 	fmt.Printf("DEBUG: Reusing LLM response for legacy parsing (avoiding second LLM call)\n")
-	
+
 	// Parse the existing response without making a new LLM call
 	cleanResponse := strings.TrimSpace(rawResponse)
-	
+
 	// Clean the response - remove markdown code blocks if present
 	if strings.HasPrefix(cleanResponse, "```json") && strings.HasSuffix(cleanResponse, "```") {
 		// Remove ```json from the beginning and ``` from the end
@@ -722,10 +721,10 @@ func (e *LLMEnhancer) llmEnhanceLegacyWithResponse(query string, classification 
 		cleanResponse = strings.TrimSuffix(cleanResponse, "```")
 		cleanResponse = strings.TrimSpace(cleanResponse)
 	}
-	
+
 	// Remove JSON comments (// ... until end of line)
 	cleanResponse = RemoveJSONComments(cleanResponse)
-	
+
 	// Try to parse as JSON with royal processor format first
 	var royalTerms RoyalSearchTerms
 	if err := json.Unmarshal([]byte(cleanResponse), &royalTerms); err == nil {
@@ -739,21 +738,21 @@ func (e *LLMEnhancer) llmEnhanceLegacyWithResponse(query string, classification 
 			SearchStrategy: royalTerms.SearchStrategy,
 		}, nil
 	}
-	
+
 	// Try legacy format
 	var llmResponse struct {
 		VectorTerms []string `json:"vector_terms"`
 		StringTerms []string `json:"string_terms"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(cleanResponse), &llmResponse); err != nil {
 		// If all parsing fails, extract what we can from the raw text
 		return e.extractTermsFromText(query, rawResponse, classification)
 	}
-	
+
 	// Process legacy format response
 	var searchTerms []string
-	
+
 	// Add string terms first (these are better for exact matching)
 	for _, term := range llmResponse.StringTerms {
 		term = strings.TrimSpace(strings.ToLower(term))
@@ -761,7 +760,7 @@ func (e *LLMEnhancer) llmEnhanceLegacyWithResponse(query string, classification 
 			searchTerms = append(searchTerms, term)
 		}
 	}
-	
+
 	// Add vector terms if we don't have enough string terms
 	if len(searchTerms) < 3 {
 		for _, term := range llmResponse.VectorTerms {
@@ -775,7 +774,7 @@ func (e *LLMEnhancer) llmEnhanceLegacyWithResponse(query string, classification 
 			}
 		}
 	}
-	
+
 	return &EnhancedQuery{
 		Original:       query,
 		Enhanced:       query,
@@ -802,28 +801,28 @@ func (e *LLMEnhancer) extractTermsFromText(query string, rawText string, classif
 	words := strings.Fields(strings.ToLower(rawText))
 	var searchTerms []string
 	seen := make(map[string]bool)
-	
+
 	for _, word := range words {
 		// Clean the word
 		word = strings.Trim(word, `"',.!?;:()[]{}`)
-		
+
 		// Skip short words and duplicates
 		if len(word) > 2 && !seen[word] {
 			seen[word] = true
 			searchTerms = append(searchTerms, word)
-			
+
 			// Limit to reasonable number of terms
 			if len(searchTerms) >= 10 {
 				break
 			}
 		}
 	}
-	
+
 	// If we couldn't extract anything meaningful, fall back to query terms
 	if len(searchTerms) == 0 {
 		searchTerms = strings.Fields(strings.ToLower(query))
 	}
-	
+
 	return &EnhancedQuery{
 		Original:       query,
 		Enhanced:       query,
@@ -900,7 +899,7 @@ User Query: %s`, query)
 
 	// Parse the JSON response
 	cleanResponse := strings.TrimSpace(response)
-	
+
 	// Clean the response - remove markdown code blocks if present
 	if strings.HasPrefix(cleanResponse, "```json") && strings.HasSuffix(cleanResponse, "```") {
 		// Remove ```json from the beginning and ``` from the end
@@ -913,23 +912,23 @@ User Query: %s`, query)
 		cleanResponse = strings.TrimSuffix(cleanResponse, "```")
 		cleanResponse = strings.TrimSpace(cleanResponse)
 	}
-	
+
 	// Remove JSON comments (// ... until end of line)
 	cleanResponse = RemoveJSONComments(cleanResponse)
-	
+
 	// Try to parse as JSON
 	var llmResponse struct {
 		VectorTerms []string `json:"vector_terms"`
 		StringTerms []string `json:"string_terms"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(cleanResponse), &llmResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse LLM enhancement response: %w", err)
 	}
-	
+
 	// Combine both vector and string terms, prioritizing string terms for traditional search
 	var searchTerms []string
-	
+
 	// Add string terms first (these are better for exact matching)
 	for _, term := range llmResponse.StringTerms {
 		term = strings.TrimSpace(strings.ToLower(term))
@@ -937,7 +936,7 @@ User Query: %s`, query)
 			searchTerms = append(searchTerms, term)
 		}
 	}
-	
+
 	// Add vector terms if we don't have enough string terms
 	if len(searchTerms) < 3 {
 		for _, term := range llmResponse.VectorTerms {
@@ -957,12 +956,12 @@ User Query: %s`, query)
 			}
 		}
 	}
-	
+
 	// Limit to 5 terms max for better performance
 	if len(searchTerms) > 5 {
 		searchTerms = searchTerms[:5]
 	}
-	
+
 	// Construct the enhanced query manually
 	enhanced := &EnhancedQuery{
 		Original:      query,
@@ -1062,17 +1061,17 @@ func (e *LLMEnhancer) detectMetadataFilters(query string) []MetadataFilter {
 
 	// File type detection - using more specific patterns to avoid false positives
 	fileTypePatterns := map[string][]string{
-		"pdf":   {"pdf", "pdfs", "pdf file", "pdf document"},
-		"docx":  {"docx", "word document", "microsoft word", ".docx"}, // Removed standalone "word" to avoid false positives
-		"xlsx":  {"xlsx", "excel", "spreadsheet", "excel file"},
-		"txt":   {"txt", "text file", "plain text", ".txt"},
-		"md":    {"markdown", "md file", ".md"},
-		"py":    {"python", "py file", ".py", "python script", "python code"},
-		"go":    {"golang", "go file", ".go", "go code"},
-		"js":    {"javascript", "js file", ".js", "javascript code"},
-		"json":  {"json file", ".json"}, // Made more specific
-		"yaml":  {"yaml", "yml", ".yaml", ".yml"},
-		"csv":   {"csv", "csv file", "comma separated", ".csv"},
+		"pdf":  {"pdf", "pdfs", "pdf file", "pdf document"},
+		"docx": {"docx", "word document", "microsoft word", ".docx"}, // Removed standalone "word" to avoid false positives
+		"xlsx": {"xlsx", "excel", "spreadsheet", "excel file"},
+		"txt":  {"txt", "text file", "plain text", ".txt"},
+		"md":   {"markdown", "md file", ".md"},
+		"py":   {"python", "py file", ".py", "python script", "python code"},
+		"go":   {"golang", "go file", ".go", "go code"},
+		"js":   {"javascript", "js file", ".js", "javascript code"},
+		"json": {"json file", ".json"}, // Made more specific
+		"yaml": {"yaml", "yml", ".yaml", ".yml"},
+		"csv":  {"csv", "csv file", "comma separated", ".csv"},
 	}
 
 	for fileType, patterns := range fileTypePatterns {
@@ -1095,8 +1094,8 @@ func (e *LLMEnhancer) detectMetadataFilters(query string) []MetadataFilter {
 				checkQuery := " " + queryLower + " "
 				checkPattern := " " + pattern + " "
 				if strings.Contains(checkQuery, checkPattern) ||
-				   strings.HasPrefix(queryLower, pattern + " ") ||
-				   strings.HasSuffix(queryLower, " " + pattern) {
+					strings.HasPrefix(queryLower, pattern+" ") ||
+					strings.HasSuffix(queryLower, " "+pattern) {
 					filters = append(filters, MetadataFilter{
 						Field:    "type",
 						Operator: "equals",
@@ -1165,10 +1164,10 @@ func (e *LLMEnhancer) detectMetadataFilters(query string) []MetadataFilter {
 		op      string
 		value   int64
 	}{
-		{"large file", "size", "greater", 10 * 1024 * 1024},     // > 10MB
-		{"small file", "size", "less", 1 * 1024 * 1024},         // < 1MB
-		{"huge file", "size", "greater", 100 * 1024 * 1024},     // > 100MB
-		{"tiny file", "size", "less", 100 * 1024},               // < 100KB
+		{"large file", "size", "greater", 10 * 1024 * 1024}, // > 10MB
+		{"small file", "size", "less", 1 * 1024 * 1024},     // < 1MB
+		{"huge file", "size", "greater", 100 * 1024 * 1024}, // > 100MB
+		{"tiny file", "size", "less", 100 * 1024},           // < 100KB
 	}
 
 	for _, sp := range sizePatterns {
@@ -1262,17 +1261,18 @@ func (e *LLMEnhancer) getFromCache(key string) (*QueryClassification, bool) {
 
 func (e *LLMEnhancer) storeInCache(key string, classification *QueryClassification) {
 	e.classificationCache.Store(key, classification)
-	
+
 	// Optional: Implement cache size limit and eviction
 	// For now, we'll let it grow unbounded (sync.Map handles this well)
 }
 
+// ClearCache clears the query cache
 func (e *LLMEnhancer) ClearCache() {
 	e.classificationCache.Range(func(key, value interface{}) bool {
 		e.classificationCache.Delete(key)
 		return true
 	})
-	
+
 	// Reset cache stats
 	e.cacheStats.mutex.Lock()
 	e.cacheStats.hits = 0
@@ -1298,7 +1298,7 @@ func (e *LLMEnhancer) GetCacheStats() (hits int64, misses int64, hitRate float64
 	hits = e.cacheStats.hits
 	misses = e.cacheStats.misses
 	e.cacheStats.mutex.RUnlock()
-	
+
 	total := hits + misses
 	if total > 0 {
 		hitRate = float64(hits) / float64(total)
@@ -1310,9 +1310,9 @@ func (e *LLMEnhancer) GetCacheStats() (hits int64, misses int64, hitRate float64
 func (e *LLMEnhancer) recordQueryMetrics(durationMs int64) {
 	e.performanceMetrics.mutex.Lock()
 	defer e.performanceMetrics.mutex.Unlock()
-	
+
 	e.performanceMetrics.totalQueries++
-	
+
 	// Update average classification time (running average)
 	currentAvg := e.performanceMetrics.avgClassifyTimeMs
 	newAvg := (currentAvg*float64(e.performanceMetrics.totalQueries-1) + float64(durationMs)) / float64(e.performanceMetrics.totalQueries)
@@ -1335,18 +1335,18 @@ func (e *LLMEnhancer) recordDirectQuery() {
 func (e *LLMEnhancer) GetPerformanceMetrics() map[string]interface{} {
 	e.performanceMetrics.mutex.RLock()
 	defer e.performanceMetrics.mutex.RUnlock()
-	
+
 	llmRate := float64(0)
 	if e.performanceMetrics.totalQueries > 0 {
 		llmRate = float64(e.performanceMetrics.llmQueries) / float64(e.performanceMetrics.totalQueries)
 	}
-	
+
 	return map[string]interface{}{
-		"total_queries":       e.performanceMetrics.totalQueries,
-		"llm_queries":         e.performanceMetrics.llmQueries,
-		"direct_queries":      e.performanceMetrics.directQueries,
+		"total_queries":        e.performanceMetrics.totalQueries,
+		"llm_queries":          e.performanceMetrics.llmQueries,
+		"direct_queries":       e.performanceMetrics.directQueries,
 		"avg_classify_time_ms": e.performanceMetrics.avgClassifyTimeMs,
-		"llm_usage_rate":      llmRate,
+		"llm_usage_rate":       llmRate,
 	}
 }
 
@@ -1354,15 +1354,15 @@ func (e *LLMEnhancer) GetPerformanceMetrics() map[string]interface{} {
 func (e *LLMEnhancer) LogPerformanceStats() {
 	metrics := e.GetPerformanceMetrics()
 	hits, misses, hitRate := e.GetCacheStats()
-	
+
 	e.log.WithFields(logrus.Fields{
-		"total_queries":    metrics["total_queries"],
-		"llm_queries":      metrics["llm_queries"],
-		"direct_queries":   metrics["direct_queries"],
-		"avg_classify_ms":  metrics["avg_classify_time_ms"],
-		"llm_usage_rate":   metrics["llm_usage_rate"],
-		"cache_hits":       hits,
-		"cache_misses":     misses,
-		"cache_hit_rate":   hitRate,
+		"total_queries":   metrics["total_queries"],
+		"llm_queries":     metrics["llm_queries"],
+		"direct_queries":  metrics["direct_queries"],
+		"avg_classify_ms": metrics["avg_classify_time_ms"],
+		"llm_usage_rate":  metrics["llm_usage_rate"],
+		"cache_hits":      hits,
+		"cache_misses":    misses,
+		"cache_hit_rate":  hitRate,
 	}).Info("Query classification performance stats")
 }

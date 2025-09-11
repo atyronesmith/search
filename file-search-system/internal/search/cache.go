@@ -14,9 +14,9 @@ type Cache struct {
 }
 
 type cacheItem struct {
-	response  *Response
-	expiresAt time.Time
-	accessCount int
+	response     *Response
+	expiresAt    time.Time
+	accessCount  int
 	lastAccessed time.Time
 }
 
@@ -27,10 +27,10 @@ func NewCache(ttl time.Duration) *Cache {
 		ttl:     ttl,
 		maxSize: 1000, // Maximum number of cached queries
 	}
-	
+
 	// Start cleanup goroutine
 	go cache.cleanupLoop()
-	
+
 	return cache
 }
 
@@ -39,23 +39,23 @@ func (c *Cache) Get(key string) *Response {
 	c.mu.RLock()
 	item, exists := c.items[key]
 	c.mu.RUnlock()
-	
+
 	if !exists {
 		return nil
 	}
-	
+
 	// Check if expired
 	if time.Now().After(item.expiresAt) {
 		c.Delete(key)
 		return nil
 	}
-	
+
 	// Update access statistics
 	c.mu.Lock()
 	item.accessCount++
 	item.lastAccessed = time.Now()
 	c.mu.Unlock()
-	
+
 	// Return a copy to prevent mutation
 	responseCopy := *item.response
 	return &responseCopy
@@ -65,12 +65,12 @@ func (c *Cache) Get(key string) *Response {
 func (c *Cache) Set(key string, response *Response) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Check cache size and evict if necessary
 	if len(c.items) >= c.maxSize {
 		c.evictLRU()
 	}
-	
+
 	c.items[key] = &cacheItem{
 		response:     response,
 		expiresAt:    time.Now().Add(c.ttl),
@@ -104,14 +104,14 @@ func (c *Cache) Size() int {
 func (c *Cache) evictLRU() {
 	var oldestKey string
 	var oldestTime time.Time
-	
+
 	for key, item := range c.items {
 		if oldestKey == "" || item.lastAccessed.Before(oldestTime) {
 			oldestKey = key
 			oldestTime = item.lastAccessed
 		}
 	}
-	
+
 	if oldestKey != "" {
 		delete(c.items, oldestKey)
 	}
@@ -121,7 +121,7 @@ func (c *Cache) evictLRU() {
 func (c *Cache) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		c.cleanup()
 	}
@@ -131,7 +131,7 @@ func (c *Cache) cleanupLoop() {
 func (c *Cache) cleanup() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	now := time.Now()
 	for key, item := range c.items {
 		if now.After(item.expiresAt) {
@@ -144,25 +144,25 @@ func (c *Cache) cleanup() {
 func (c *Cache) GetStats() CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	stats := CacheStats{
-		Size:        len(c.items),
-		MaxSize:     c.maxSize,
-		TTL:         c.ttl,
-		TotalHits:   0,
-		AvgHitRate:  0,
+		Size:       len(c.items),
+		MaxSize:    c.maxSize,
+		TTL:        c.ttl,
+		TotalHits:  0,
+		AvgHitRate: 0,
 	}
-	
+
 	totalAccess := 0
 	for _, item := range c.items {
 		totalAccess += item.accessCount
 		stats.TotalHits += item.accessCount - 1 // Subtract initial set
 	}
-	
+
 	if len(c.items) > 0 {
 		stats.AvgHitRate = float64(stats.TotalHits) / float64(len(c.items))
 	}
-	
+
 	return stats
 }
 

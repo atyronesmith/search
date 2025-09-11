@@ -47,14 +47,14 @@ type RoyalMetadata struct {
 
 	// Structural Metadata
 	StructuralMetadata struct {
-		Title                string   `json:"title,omitempty"`
-		Authors              []string `json:"authors,omitempty"`
-		SectionHeaders       []string `json:"section_headers,omitempty"`
-		TableCount           int      `json:"table_count"`
-		ImageCount           int      `json:"image_count"`
-		HasTableOfContents   bool     `json:"has_table_of_contents"`
-		DocumentType         string   `json:"document_type,omitempty"`
-		Categories           []string `json:"categories,omitempty"`
+		Title                string         `json:"title,omitempty"`
+		Authors              []string       `json:"authors,omitempty"`
+		SectionHeaders       []string       `json:"section_headers,omitempty"`
+		TableCount           int            `json:"table_count"`
+		ImageCount           int            `json:"image_count"`
+		HasTableOfContents   bool           `json:"has_table_of_contents"`
+		DocumentType         string         `json:"document_type,omitempty"`
+		Categories           []string       `json:"categories,omitempty"`
 		UnstructuredElements map[string]int `json:"unstructured_elements,omitempty"`
 	} `json:"structural_metadata"`
 
@@ -96,7 +96,7 @@ func NewRoyalDocumentProcessor(config UnstructuredConfig, logger *logrus.Logger)
 // ExtractRoyalMetadata extracts comprehensive metadata using the royal schema
 func (r *RoyalDocumentProcessor) ExtractRoyalMetadata(ctx context.Context, filePath string) (*RoyalMetadata, *ExtractedContent, error) {
 	startTime := time.Now()
-	
+
 	r.log.WithField("file", filePath).Info("Starting royal metadata extraction")
 
 	// Create temporary Python script for extraction
@@ -466,7 +466,7 @@ if __name__ == "__main__":
 // runRoyalPythonScript executes the royal Python script
 func (r *RoyalDocumentProcessor) runRoyalPythonScript(ctx context.Context, scriptPath, filePath string) (string, error) {
 	var cmd *exec.Cmd
-	
+
 	if r.venvPath != "" {
 		pythonBin := filepath.Join(r.venvPath, "bin", "python")
 		cmd = exec.CommandContext(ctx, pythonBin, scriptPath, filePath)

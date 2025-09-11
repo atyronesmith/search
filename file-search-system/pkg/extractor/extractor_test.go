@@ -26,7 +26,7 @@ func TestFileTypeDetection(t *testing.T) {
 		t.Run(tt.filename, func(t *testing.T) {
 			ext := filepath.Ext(tt.filename)
 			assert.NotEmpty(t, ext)
-			
+
 			// Basic file extension validation
 			switch ext {
 			case ".txt":
@@ -78,7 +78,7 @@ func TestContentExtraction(t *testing.T) {
 
 func TestSectionTypes(t *testing.T) {
 	validTypes := []string{"text", "code", "markdown", "structured", "comment", "header"}
-	
+
 	for _, sectionType := range validTypes {
 		t.Run("section type: "+sectionType, func(t *testing.T) {
 			assert.NotEmpty(t, sectionType)

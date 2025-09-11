@@ -31,7 +31,7 @@ func (c *SlidingWindowChunker) Chunk(content *extractor.ExtractedContent, config
 	if text == "" {
 		return []Chunk{}, nil
 	}
-	
+
 	// Choose chunking method based on configuration
 	if config.SplitOnSentences {
 		return c.chunkBySentences(text, config)
@@ -45,17 +45,17 @@ func (c *SlidingWindowChunker) chunkBySentences(text string, config *Config) ([]
 	if len(sentences) == 0 {
 		return []Chunk{}, nil
 	}
-	
+
 	var chunks []Chunk
 	chunkIndex := 0
-	
+
 	i := 0
 	for i < len(sentences) {
 		chunk := c.buildSentenceChunk(sentences, i, config)
 		chunk.Index = chunkIndex
 		chunks = append(chunks, chunk)
 		chunkIndex++
-		
+
 		// Calculate next starting position with overlap
 		nextStart := c.calculateNextStart(sentences, i, config)
 		if nextStart <= i {
@@ -63,7 +63,7 @@ func (c *SlidingWindowChunker) chunkBySentences(text string, config *Config) ([]
 		}
 		i = nextStart
 	}
-	
+
 	return chunks, nil
 }
 
@@ -72,10 +72,10 @@ func (c *SlidingWindowChunker) chunkByCharacters(text string, config *Config) ([
 	if len(text) == 0 {
 		return []Chunk{}, nil
 	}
-	
+
 	var chunks []Chunk
 	chunkIndex := 0
-	
+
 	start := 0
 	for start < len(text) {
 		// Calculate chunk end position
@@ -83,12 +83,12 @@ func (c *SlidingWindowChunker) chunkByCharacters(text string, config *Config) ([
 		if end > len(text) {
 			end = len(text)
 		}
-		
+
 		// Adjust end to word boundary if possible
 		if end < len(text) {
 			end = c.findWordBoundary(text, end)
 		}
-		
+
 		// Extract chunk content
 		chunkContent := strings.TrimSpace(text[start:end])
 		if chunkContent != "" {
@@ -107,7 +107,7 @@ func (c *SlidingWindowChunker) chunkByCharacters(text string, config *Config) ([
 			chunks = append(chunks, chunk)
 			chunkIndex++
 		}
-		
+
 		// Calculate next start position with overlap
 		nextStart := end - config.ChunkOverlap
 		if nextStart <= start {
@@ -116,12 +116,12 @@ func (c *SlidingWindowChunker) chunkByCharacters(text string, config *Config) ([
 		if nextStart >= len(text) {
 			break
 		}
-		
+
 		// Adjust start to word boundary if possible
 		nextStart = c.findWordBoundary(text, nextStart)
 		start = nextStart
 	}
-	
+
 	return chunks, nil
 }
 
@@ -129,34 +129,34 @@ func (c *SlidingWindowChunker) chunkByCharacters(text string, config *Config) ([
 func (c *SlidingWindowChunker) buildSentenceChunk(sentences []string, startIdx int, config *Config) Chunk {
 	chunkBuilder := strings.Builder{}
 	sentenceCount := 0
-	
+
 	for i := startIdx; i < len(sentences); i++ {
 		sentence := sentences[i]
-		
+
 		// Check if adding this sentence would exceed the chunk size
 		testContent := chunkBuilder.String()
 		if testContent != "" {
 			testContent += " "
 		}
 		testContent += sentence
-		
+
 		if countTokensApproximate(testContent) > config.ChunkSize && chunkBuilder.Len() > 0 {
 			break
 		}
-		
+
 		// Add sentence to chunk
 		if chunkBuilder.Len() > 0 {
 			chunkBuilder.WriteString(" ")
 		}
 		chunkBuilder.WriteString(sentence)
 		sentenceCount++
-		
+
 		// Don't exceed maximum chunk size
 		if countTokensApproximate(chunkBuilder.String()) >= config.MaxChunkSize {
 			break
 		}
 	}
-	
+
 	return Chunk{
 		Content: strings.TrimSpace(chunkBuilder.String()),
 		Type:    "sliding",
@@ -174,18 +174,18 @@ func (c *SlidingWindowChunker) calculateNextStart(sentences []string, currentSta
 	// Build current chunk to understand its size
 	currentChunk := c.buildSentenceChunk(sentences, currentStart, config)
 	currentSentences := c.countSentencesInChunk(currentChunk.Content)
-	
+
 	// Calculate overlap in sentences
 	overlapSentences := (config.ChunkOverlap * currentSentences) / config.ChunkSize
 	if overlapSentences < 1 {
 		overlapSentences = 1
 	}
-	
+
 	nextStart := currentStart + currentSentences - overlapSentences
 	if nextStart <= currentStart {
 		nextStart = currentStart + 1
 	}
-	
+
 	return nextStart
 }
 
@@ -194,16 +194,16 @@ func (c *SlidingWindowChunker) countSentencesInChunk(content string) int {
 	if content == "" {
 		return 0
 	}
-	
+
 	// Count sentence ending punctuation
-	count := strings.Count(content, ".") + 
-	        strings.Count(content, "!") + 
-	        strings.Count(content, "?")
-	
+	count := strings.Count(content, ".") +
+		strings.Count(content, "!") +
+		strings.Count(content, "?")
+
 	if count == 0 {
 		return 1 // At least one sentence
 	}
-	
+
 	return count
 }
 
@@ -212,16 +212,16 @@ func (c *SlidingWindowChunker) findWordBoundary(text string, pos int) int {
 	if pos >= len(text) {
 		return len(text)
 	}
-	
+
 	// Look backwards for a space, newline, or punctuation
 	for i := pos - 1; i > 0; i-- {
 		char := text[i]
-		if char == ' ' || char == '\n' || char == '\t' || 
-		   char == '.' || char == ',' || char == ';' || char == ':' {
+		if char == ' ' || char == '\n' || char == '\t' ||
+			char == '.' || char == ',' || char == ';' || char == ':' {
 			return i + 1
 		}
 	}
-	
+
 	return pos
 }
 
@@ -229,19 +229,19 @@ func (c *SlidingWindowChunker) findWordBoundary(text string, pos int) int {
 func (c *SlidingWindowChunker) chunkWithFixedOverlap(text string, chunkSize, overlap int) []Chunk {
 	var chunks []Chunk
 	chunkIndex := 0
-	
+
 	start := 0
 	for start < len(text) {
 		end := start + chunkSize
 		if end > len(text) {
 			end = len(text)
 		}
-		
+
 		// Adjust to word boundary
 		if end < len(text) {
 			end = c.findWordBoundary(text, end)
 		}
-		
+
 		chunkContent := strings.TrimSpace(text[start:end])
 		if chunkContent != "" {
 			chunk := Chunk{
@@ -259,17 +259,17 @@ func (c *SlidingWindowChunker) chunkWithFixedOverlap(text string, chunkSize, ove
 			chunks = append(chunks, chunk)
 			chunkIndex++
 		}
-		
+
 		// Move to next position
 		start = end - overlap
 		if start >= len(text) || start <= 0 {
 			break
 		}
-		
+
 		// Adjust start to word boundary
 		start = c.findWordBoundary(text, start)
 	}
-	
+
 	return chunks
 }
 
@@ -277,7 +277,7 @@ func (c *SlidingWindowChunker) chunkWithFixedOverlap(text string, chunkSize, ove
 func (c *SlidingWindowChunker) optimizeChunkBoundaries(chunks []Chunk, originalText string) []Chunk {
 	for i := range chunks {
 		chunk := &chunks[i]
-		
+
 		// Optimize start boundary (except for first chunk)
 		if i > 0 && chunk.StartChar > 0 {
 			newStart := c.findWordBoundary(originalText, chunk.StartChar)
@@ -286,7 +286,7 @@ func (c *SlidingWindowChunker) optimizeChunkBoundaries(chunks []Chunk, originalT
 				chunk.Content = strings.TrimSpace(originalText[chunk.StartChar:chunk.EndChar])
 			}
 		}
-		
+
 		// Optimize end boundary (except for last chunk)
 		if i < len(chunks)-1 && chunk.EndChar < len(originalText) {
 			newEnd := c.findWordBoundary(originalText, chunk.EndChar)
@@ -296,6 +296,6 @@ func (c *SlidingWindowChunker) optimizeChunkBoundaries(chunks []Chunk, originalT
 			}
 		}
 	}
-	
+
 	return chunks
 }

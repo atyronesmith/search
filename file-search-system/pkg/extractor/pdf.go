@@ -94,11 +94,11 @@ func (e *PDFExtractor) extractWithPDFToText(ctx context.Context, filePath string
 	}
 
 	text := string(output)
-	
+
 	// Basic cleanup
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
-	
+
 	return strings.TrimSpace(text), nil
 }
 
@@ -127,10 +127,10 @@ func (e *PDFExtractor) parsePages(text string) []PageContent {
 	}
 
 	var pages []PageContent
-	
+
 	// Split on form feed characters (often used as page separators in pdftotext output)
 	pageTexts := strings.Split(text, "\f")
-	
+
 	for i, pageText := range pageTexts {
 		pageText = strings.TrimSpace(pageText)
 		if pageText != "" {
@@ -140,7 +140,7 @@ func (e *PDFExtractor) parsePages(text string) []PageContent {
 			})
 		}
 	}
-	
+
 	// If no form feed characters found, treat entire text as single page
 	if len(pages) == 0 && text != "" {
 		pages = append(pages, PageContent{
@@ -148,6 +148,6 @@ func (e *PDFExtractor) parsePages(text string) []PageContent {
 			Text:   text,
 		})
 	}
-	
+
 	return pages
 }

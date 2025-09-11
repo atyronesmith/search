@@ -24,49 +24,49 @@ func NewCodeExtractor(config *Config) *CodeExtractor {
 func (e *CodeExtractor) CanExtract(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	supportedExts := map[string]bool{
-		".py":   true,
-		".js":   true,
-		".ts":   true,
-		".jsx":  true,
-		".tsx":  true,
-		".java": true,
-		".cpp":  true,
-		".c":    true,
-		".h":    true,
-		".hpp":  true,
-		".go":   true,
-		".rs":   true,
-		".php":  true,
-		".rb":   true,
-		".swift": true,
-		".kt":   true,
-		".scala": true,
-		".cs":   true,
-		".sh":   true,
-		".bash": true,
-		".zsh":  true,
-		".fish": true,
-		".ps1":  true,
-		".json": true,
-		".yaml": true,
-		".yml":  true,
-		".toml": true,
-		".xml":  true,
-		".html": true,
-		".css":  true,
-		".scss": true,
-		".sass": true,
-		".less": true,
-		".sql":  true,
-		".r":    true,
-		".m":    true,
-		".pl":   true,
-		".lua":  true,
-		".vim":  true,
+		".py":         true,
+		".js":         true,
+		".ts":         true,
+		".jsx":        true,
+		".tsx":        true,
+		".java":       true,
+		".cpp":        true,
+		".c":          true,
+		".h":          true,
+		".hpp":        true,
+		".go":         true,
+		".rs":         true,
+		".php":        true,
+		".rb":         true,
+		".swift":      true,
+		".kt":         true,
+		".scala":      true,
+		".cs":         true,
+		".sh":         true,
+		".bash":       true,
+		".zsh":        true,
+		".fish":       true,
+		".ps1":        true,
+		".json":       true,
+		".yaml":       true,
+		".yml":        true,
+		".toml":       true,
+		".xml":        true,
+		".html":       true,
+		".css":        true,
+		".scss":       true,
+		".sass":       true,
+		".less":       true,
+		".sql":        true,
+		".r":          true,
+		".m":          true,
+		".pl":         true,
+		".lua":        true,
+		".vim":        true,
 		".dockerfile": true,
-		".makefile": true,
+		".makefile":   true,
 	}
-	
+
 	// Also check filename patterns
 	filename := strings.ToLower(filepath.Base(filePath))
 	filenamePatterns := []string{
@@ -74,13 +74,13 @@ func (e *CodeExtractor) CanExtract(filePath string) bool {
 		"requirements.txt", "package.json", "composer.json",
 		"cargo.toml", "go.mod", "go.sum",
 	}
-	
+
 	for _, pattern := range filenamePatterns {
 		if strings.Contains(filename, pattern) {
 			return true
 		}
 	}
-	
+
 	return supportedExts[ext]
 }
 
@@ -155,54 +155,54 @@ func (e *CodeExtractor) GetSupportedExtensions() []string {
 func (e *CodeExtractor) detectLanguage(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	filename := strings.ToLower(filepath.Base(filePath))
-	
+
 	// Extension mapping
 	extLangMap := map[string]string{
-		".py":   "python",
-		".js":   "javascript",
-		".ts":   "typescript",
-		".jsx":  "javascript",
-		".tsx":  "typescript",
-		".java": "java",
-		".cpp":  "cpp",
-		".c":    "c",
-		".h":    "c",
-		".hpp":  "cpp",
-		".go":   "go",
-		".rs":   "rust",
-		".php":  "php",
-		".rb":   "ruby",
+		".py":    "python",
+		".js":    "javascript",
+		".ts":    "typescript",
+		".jsx":   "javascript",
+		".tsx":   "typescript",
+		".java":  "java",
+		".cpp":   "cpp",
+		".c":     "c",
+		".h":     "c",
+		".hpp":   "cpp",
+		".go":    "go",
+		".rs":    "rust",
+		".php":   "php",
+		".rb":    "ruby",
 		".swift": "swift",
-		".kt":   "kotlin",
+		".kt":    "kotlin",
 		".scala": "scala",
-		".cs":   "csharp",
-		".sh":   "shell",
-		".bash": "bash",
-		".zsh":  "zsh",
-		".fish": "fish",
-		".ps1":  "powershell",
-		".json": "json",
-		".yaml": "yaml",
-		".yml":  "yaml",
-		".toml": "toml",
-		".xml":  "xml",
-		".html": "html",
-		".css":  "css",
-		".scss": "scss",
-		".sass": "sass",
-		".less": "less",
-		".sql":  "sql",
-		".r":    "r",
-		".m":    "objective-c",
-		".pl":   "perl",
-		".lua":  "lua",
-		".vim":  "vim",
+		".cs":    "csharp",
+		".sh":    "shell",
+		".bash":  "bash",
+		".zsh":   "zsh",
+		".fish":  "fish",
+		".ps1":   "powershell",
+		".json":  "json",
+		".yaml":  "yaml",
+		".yml":   "yaml",
+		".toml":  "toml",
+		".xml":   "xml",
+		".html":  "html",
+		".css":   "css",
+		".scss":  "scss",
+		".sass":  "sass",
+		".less":  "less",
+		".sql":   "sql",
+		".r":     "r",
+		".m":     "objective-c",
+		".pl":    "perl",
+		".lua":   "lua",
+		".vim":   "vim",
 	}
-	
+
 	if lang, ok := extLangMap[ext]; ok {
 		return lang
 	}
-	
+
 	// Filename patterns
 	if strings.Contains(filename, "dockerfile") {
 		return "dockerfile"
@@ -210,18 +210,18 @@ func (e *CodeExtractor) detectLanguage(filePath string) string {
 	if strings.Contains(filename, "makefile") {
 		return "makefile"
 	}
-	
+
 	return "text"
 }
 
 // addLanguageMetadata adds language-specific metadata
 func (e *CodeExtractor) addLanguageMetadata(metadata map[string]interface{}, content, language string) {
 	lines := strings.Split(content, "\n")
-	
+
 	// Count comment lines
 	commentCount := 0
 	emptyLineCount := 0
-	
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -230,11 +230,11 @@ func (e *CodeExtractor) addLanguageMetadata(metadata map[string]interface{}, con
 			commentCount++
 		}
 	}
-	
+
 	metadata["comment_lines"] = commentCount
 	metadata["empty_lines"] = emptyLineCount
 	metadata["code_lines"] = len(lines) - commentCount - emptyLineCount
-	
+
 	// Add language-specific features
 	switch language {
 	case "python":
@@ -276,25 +276,25 @@ func (e *CodeExtractor) isCommentLine(line, language string) bool {
 		"lua":        {"--"},
 		"vim":        {"\""},
 	}
-	
+
 	prefixes, ok := commentPrefixes[language]
 	if !ok {
 		return false
 	}
-	
+
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(line, prefix) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 // parseCodeStructure parses code into structural sections
 func (e *CodeExtractor) parseCodeStructure(content, language string) []SectionContent {
 	lines := strings.Split(content, "\n")
-	
+
 	switch language {
 	case "python":
 		return e.parsePythonStructure(lines)
@@ -312,10 +312,10 @@ func (e *CodeExtractor) parseGenericCodeStructure(lines []string, language strin
 	var sections []SectionContent
 	var currentSection []string
 	var currentType = "code"
-	
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		
+
 		// Detect function-like patterns
 		if e.isFunctionDeclaration(trimmed, language) {
 			// Save previous section
@@ -326,7 +326,7 @@ func (e *CodeExtractor) parseGenericCodeStructure(lines []string, language strin
 					Language: language,
 				})
 			}
-			
+
 			// Start new function section
 			currentType = "function"
 			currentSection = []string{line}
@@ -339,7 +339,7 @@ func (e *CodeExtractor) parseGenericCodeStructure(lines []string, language strin
 					Language: language,
 				})
 			}
-			
+
 			// Start new class section
 			currentType = "class"
 			currentSection = []string{line}
@@ -347,7 +347,7 @@ func (e *CodeExtractor) parseGenericCodeStructure(lines []string, language strin
 			currentSection = append(currentSection, line)
 		}
 	}
-	
+
 	// Save last section
 	if len(currentSection) > 0 {
 		sections = append(sections, SectionContent{
@@ -356,7 +356,7 @@ func (e *CodeExtractor) parseGenericCodeStructure(lines []string, language strin
 			Language: language,
 		})
 	}
-	
+
 	return sections
 }
 
@@ -372,7 +372,7 @@ func (e *CodeExtractor) isFunctionDeclaration(line, language string) bool {
 		"go":         {"func "},
 		"rust":       {"fn "},
 	}
-	
+
 	if p, ok := patterns[language]; ok {
 		for _, pattern := range p {
 			if strings.Contains(line, pattern) && strings.Contains(line, "(") {
@@ -380,7 +380,7 @@ func (e *CodeExtractor) isFunctionDeclaration(line, language string) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -395,7 +395,7 @@ func (e *CodeExtractor) isClassDeclaration(line, language string) bool {
 		"go":         {"type ", "struct "},
 		"rust":       {"struct ", "impl ", "trait "},
 	}
-	
+
 	if p, ok := patterns[language]; ok {
 		for _, pattern := range p {
 			if strings.HasPrefix(line, pattern) {
@@ -403,7 +403,7 @@ func (e *CodeExtractor) isClassDeclaration(line, language string) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
