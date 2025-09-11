@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	configPath = flag.String("config", ".env", "Path to configuration file")
+	configPath = flag.String("config", "", "Path to configuration file (auto-detected if not specified)")
 	initDB     = flag.Bool("init-db", false, "Initialize database schema")
 	daemon     = flag.Bool("daemon", false, "Run as background daemon")
 )
@@ -26,7 +26,7 @@ func main() {
 	// Initialize logger
 	log := logrus.New()
 	log.SetFormatter(&logrus.JSONFormatter{})
-	
+
 	// Load configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -85,10 +85,10 @@ func main() {
 	<-sigChan
 
 	log.Info("Shutting down...")
-	
+
 	// Stop services
 	apiServer.Stop()
 	svc.Stop()
-	
+
 	log.Info("Shutdown complete")
 }
