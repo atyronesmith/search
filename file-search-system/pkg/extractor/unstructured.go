@@ -23,6 +23,7 @@ type UnstructuredExtractor struct {
 	log            *logrus.Logger
 	royalProcessor *RoyalDocumentProcessor
 	httpClient     *http.Client
+	validator      *FileTypeValidator
 }
 
 // UnstructuredConfig represents configuration for the Unstructured service
@@ -64,6 +65,7 @@ func NewUnstructuredExtractor(config UnstructuredConfig, logger *logrus.Logger) 
 		httpClient: &http.Client{
 			Timeout: config.Timeout,
 		},
+		validator: NewFileTypeValidator(logger),
 	}
 }
 
@@ -87,18 +89,39 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 		return nil, fmt.Errorf("file does not exist: %s", filePath)
 	}
 
-	// Get file extension to check if supported
+	// Get file extension and validate actual content type
 	ext := strings.ToLower(filepath.Ext(filePath))
-	if !e.isSupported(ext) {
-		return nil, fmt.Errorf("unsupported file type: %s", ext)
+	actualExt := ext
+	
+	// Validate file type and get the actual type
+	if e.validator != nil {
+		if validation, err := e.validator.ValidateFile(filePath); err == nil {
+			if !validation.IsValid {
+				e.log.WithFields(logrus.Fields{
+					"file":          filePath,
+					"extension":     ext,
+					"detected_type": validation.DetectedType,
+					"detected_mime": validation.DetectedMIME,
+				}).Warn("File extension does not match detected content type")
+			}
+			// Use the actual detected type for processing
+			if validation.ActualType != "" {
+				actualExt = "." + validation.ActualType
+			}
+		}
+	}
+	
+	// Check if the actual file type is supported
+	if !e.isSupported(actualExt) {
+		return nil, fmt.Errorf("unsupported file type: %s (detected as %s)", ext, actualExt)
 	}
 
 	// Create a timeout context to ensure the extraction doesn't hang
 	extractCtx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
-	// Use HTTP API to extract content
-	response, err := e.extractViaAPI(extractCtx, filePath)
+	// Use HTTP API to extract content, passing the actual detected type
+	response, err := e.extractViaAPIWithType(extractCtx, filePath, actualExt)
 	if err != nil {
 		return nil, fmt.Errorf("extraction failed: %v", err)
 	}
@@ -206,8 +229,29 @@ func (e *UnstructuredExtractor) isSupported(ext string) bool {
 	return supportedTypes[strings.ToLower(ext)]
 }
 
-// extractViaAPI extracts text content using the Unstructured HTTP API
+// extractViaAPIWithType extracts text content using the Unstructured HTTP API with the correct file type
+func (e *UnstructuredExtractor) extractViaAPIWithType(ctx context.Context, filePath string, actualExt string) (*UnstructuredResponse, error) {
+	// Prepare the filename with the correct extension for Unstructured
+	baseName := filepath.Base(filePath)
+	if actualExt != filepath.Ext(filePath) {
+		// Replace extension with the detected type
+		baseName = strings.TrimSuffix(baseName, filepath.Ext(baseName)) + actualExt
+		e.log.WithFields(logrus.Fields{
+			"original_name": filepath.Base(filePath),
+			"adjusted_name": baseName,
+		}).Debug("Adjusted filename for correct type detection")
+	}
+	
+	return e.extractViaAPIInternal(ctx, filePath, baseName)
+}
+
+// extractViaAPI extracts text content using the Unstructured HTTP API (backward compatibility)
 func (e *UnstructuredExtractor) extractViaAPI(ctx context.Context, filePath string) (*UnstructuredResponse, error) {
+	return e.extractViaAPIInternal(ctx, filePath, filepath.Base(filePath))
+}
+
+// extractViaAPIInternal is the internal implementation that accepts a custom filename
+func (e *UnstructuredExtractor) extractViaAPIInternal(ctx context.Context, filePath string, fileName string) (*UnstructuredResponse, error) {
 	// Check context before starting
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("context cancelled before extraction: %v", ctx.Err())
@@ -234,8 +278,8 @@ func (e *UnstructuredExtractor) extractViaAPI(ctx context.Context, filePath stri
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
-	// Add file field
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	// Add file field with the correct filename for type detection
+	part, err := writer.CreateFormFile("file", fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %v", err)
 	}
