@@ -16,19 +16,19 @@ import (
 
 // Scanner handles file system scanning
 type Scanner struct {
-	db              *database.DB
-	config          *ScannerConfig
-	log             *logrus.Logger
-	supportedExts   map[string]bool
-	ignorePatterns  []string
+	db             *database.DB
+	config         *ScannerConfig
+	log            *logrus.Logger
+	supportedExts  map[string]bool
+	ignorePatterns []string
 }
 
 // ScannerConfig represents the configuration for the file scanner
 type ScannerConfig struct {
-	WatchPaths      []string
-	MaxFileSizeMB   int
-	IgnorePatterns  []string
-	SupportedTypes  []string
+	WatchPaths     []string
+	MaxFileSizeMB  int
+	IgnorePatterns []string
+	SupportedTypes []string
 }
 
 // NewScanner creates a new file scanner instance
@@ -132,7 +132,7 @@ func (s *Scanner) processFile(ctx context.Context, path string, info os.FileInfo
 // shouldIgnore checks if a path matches any ignore patterns
 func (s *Scanner) shouldIgnore(path string) bool {
 	basename := filepath.Base(path)
-	
+
 	for _, pattern := range s.ignorePatterns {
 		// Check basename patterns
 		if matched, _ := filepath.Match(pattern, basename); matched {
@@ -143,12 +143,20 @@ func (s *Scanner) shouldIgnore(path string) bool {
 			return true
 		}
 	}
-	
+
 	// Check for hidden files
 	if strings.HasPrefix(basename, ".") {
 		return true
 	}
 	
+	// Check for temporary/lock files (MS Office, LibreOffice, etc.)
+	if strings.HasPrefix(basename, "~$") || // MS Office temporary files
+	   strings.HasPrefix(basename, ".~") || // Some editors' temp files
+	   strings.HasPrefix(basename, "~") && strings.HasSuffix(basename, ".tmp") { // Generic temp files
+		s.log.WithField("path", path).Debug("Ignoring temporary/lock file")
+		return true
+	}
+
 	return false
 }
 
@@ -196,7 +204,7 @@ func (s *Scanner) getFileByPath(ctx context.Context, path string) (*database.Fil
 		FROM files
 		WHERE path = $1
 	`
-	
+
 	var file database.File
 	err := s.db.QueryRow(ctx, query, path).Scan(
 		&file.ID, &file.Path, &file.ParentPath, &file.Filename,
@@ -205,14 +213,14 @@ func (s *Scanner) getFileByPath(ctx context.Context, path string) (*database.Fil
 		&file.ContentHash, &file.IndexingStatus, &file.ErrorMessage,
 		&file.Metadata,
 	)
-	
+
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return nil, nil
 		}
 		return nil, err
 	}
-	
+
 	return &file, nil
 }
 
@@ -223,7 +231,7 @@ func (s *Scanner) markFileForReindexing(ctx context.Context, fileID int64, path 
 	if s.log != nil {
 		s.log.Debugf("File %s changed: new modified time=%v", path, timestamps.ModifiedAt)
 	}
-	
+
 	query := `
 		UPDATE files 
 		SET content_hash = $1, 
@@ -250,7 +258,7 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 	filename := filepath.Base(path)
 	ext := filepath.Ext(filename)
 	fileType := s.determineFileType(ext)
-	
+
 	// Get proper filesystem timestamps
 	timestamps := filesystem.GetFileTimestampsFromInfo(path, info)
 	if s.log != nil {
@@ -260,7 +268,7 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 			s.log.Debugf("File %s: using modtime for both timestamps (%v)", path, timestamps.ModifiedAt)
 		}
 	}
-	
+
 	query := `
 		INSERT INTO files (
 			path, filename, extension, file_type, size_bytes,
@@ -271,12 +279,12 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 			modified_at = EXCLUDED.modified_at,
 			indexing_status = 'pending'
 	`
-	
+
 	_, err := s.db.Exec(ctx, query,
 		path, filename, ext, fileType, info.Size(),
 		timestamps.CreatedAt, timestamps.ModifiedAt, hash,
 	)
-	
+
 	if err != nil {
 		return err
 	}
@@ -293,7 +301,7 @@ func (s *Scanner) addNewFile(ctx context.Context, path string, info os.FileInfo,
 // determineFileType determines the file type based on extension
 func (s *Scanner) determineFileType(ext string) string {
 	ext = strings.ToLower(ext)
-	
+
 	// More specific file type mapping
 	switch ext {
 	// Document types
@@ -307,7 +315,7 @@ func (s *Scanner) determineFileType(ext string) string {
 		return "rtf"
 	case ".odt":
 		return "odt"
-		
+
 	// Spreadsheet types
 	case ".xls":
 		return "xls"
@@ -317,7 +325,7 @@ func (s *Scanner) determineFileType(ext string) string {
 		return "csv"
 	case ".ods":
 		return "ods"
-		
+
 	// Code types
 	case ".py":
 		return "python"
@@ -343,17 +351,17 @@ func (s *Scanner) determineFileType(ext string) string {
 		return "json"
 	case ".yaml", ".yml":
 		return "yaml"
-		
+
 	// Text types
 	case ".txt":
 		return "text"
 	case ".md":
 		return "markdown"
-		
+
 	// Image types
 	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg":
 		return "image"
-		
+
 	default:
 		return "text"
 	}
