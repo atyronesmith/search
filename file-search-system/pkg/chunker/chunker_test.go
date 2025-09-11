@@ -12,7 +12,7 @@ func TestChunkerBasics(t *testing.T) {
 		chunkSize := 512
 		overlap := 50
 		minSize := 100
-		
+
 		assert.True(t, chunkSize > 0, "Chunk size should be positive")
 		assert.True(t, overlap < chunkSize, "Overlap should be less than chunk size")
 		assert.True(t, minSize < chunkSize, "Min size should be less than chunk size")
@@ -23,7 +23,7 @@ func TestTextSplitting(t *testing.T) {
 	t.Run("basic text splitting", func(t *testing.T) {
 		text := "This is a test sentence. This is another sentence. This is a third sentence."
 		sentences := strings.Split(text, ". ")
-		
+
 		assert.Equal(t, 3, len(sentences))
 		assert.Contains(t, sentences[0], "test")
 	})
@@ -64,7 +64,7 @@ func TestChunkProperties(t *testing.T) {
 	t.Run("chunk structure", func(t *testing.T) {
 		// Test that chunks have required properties
 		properties := []string{"Content", "Index", "Type", "Language", "StartChar", "EndChar"}
-		
+
 		for _, prop := range properties {
 			assert.NotEmpty(t, prop, "Property should not be empty")
 		}

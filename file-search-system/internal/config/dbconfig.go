@@ -43,27 +43,27 @@ func (c *DBConfigService) GetConfig(ctx context.Context) (*Config, error) {
 		FROM system_config
 		ORDER BY category, config_key
 	`
-	
+
 	rows, err := c.db.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query config: %w", err)
 	}
 	defer rows.Close()
-	
+
 	config := &Config{}
-	
+
 	for rows.Next() {
 		var cv Value
 		if err := rows.Scan(&cv.Key, &cv.Value, &cv.Type, &cv.Description, &cv.Category, &cv.CreatedAt, &cv.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan config row: %w", err)
 		}
-		
+
 		// Map database values to Config struct
 		if err := c.mapConfigValue(config, cv); err != nil {
 			return nil, fmt.Errorf("failed to map config value %s: %w", cv.Key, err)
 		}
 	}
-	
+
 	return config, nil
 }
 
@@ -74,22 +74,22 @@ func (c *DBConfigService) GetConfigMap(ctx context.Context) (map[string]interfac
 		FROM system_config
 		ORDER BY category, config_key
 	`
-	
+
 	rows, err := c.db.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query config: %w", err)
 	}
 	defer rows.Close()
-	
+
 	result := make(map[string]interface{})
 	categories := make(map[string]map[string]interface{})
-	
+
 	for rows.Next() {
 		var key, value, configType, category string
 		if err := rows.Scan(&key, &value, &configType, &category); err != nil {
 			continue
 		}
-		
+
 		// Convert value based on type
 		var parsedValue interface{}
 		switch configType {
@@ -121,20 +121,20 @@ func (c *DBConfigService) GetConfigMap(ctx context.Context) (map[string]interfac
 		default:
 			parsedValue = value
 		}
-		
+
 		// Group by category
 		if categories[category] == nil {
 			categories[category] = make(map[string]interface{})
 		}
 		categories[category][key] = parsedValue
-		
+
 		// Also add to flat structure for backward compatibility
 		result[key] = parsedValue
 	}
-	
+
 	// Add categorized structure
 	result["categories"] = categories
-	
+
 	return result, nil
 }
 
@@ -152,7 +152,7 @@ func (c *DBConfigService) UpdateConfig(ctx context.Context, updates map[string]i
 func (c *DBConfigService) updateConfigValue(ctx context.Context, key string, value interface{}) error {
 	var stringValue string
 	var configType string
-	
+
 	switch v := value.(type) {
 	case bool:
 		stringValue = strconv.FormatBool(v)
@@ -178,13 +178,13 @@ func (c *DBConfigService) updateConfigValue(ctx context.Context, key string, val
 		stringValue = fmt.Sprintf("%v", v)
 		configType = "string"
 	}
-	
+
 	query := `
 		UPDATE system_config 
 		SET config_value = $1, config_type = $2, updated_at = CURRENT_TIMESTAMP
 		WHERE config_key = $3
 	`
-	
+
 	_, err := c.db.Exec(ctx, query, stringValue, configType, key)
 	return err
 }
@@ -201,7 +201,7 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 	case "database_timeout":
 		val, _ := strconv.Atoi(cv.Value)
 		config.DatabaseTimeout = time.Duration(val) * time.Second
-		
+
 	// Ollama/AI
 	case "ollama_host":
 		config.OllamaHost = cv.Value
@@ -213,14 +213,14 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 	case "ollama_timeout":
 		val, _ := strconv.Atoi(cv.Value)
 		config.OllamaTimeout = time.Duration(val) * time.Second
-		
+
 	// API Server (keep from env for now since they're startup params)
 	case "api_host":
 		config.APIHost = cv.Value
 	case "api_port":
 		val, _ := strconv.Atoi(cv.Value)
 		config.APIPort = val
-		
+
 	// Indexing
 	case "batch_size":
 		val, _ := strconv.Atoi(cv.Value)
@@ -234,7 +234,7 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 	case "chunk_overlap":
 		val, _ := strconv.Atoi(cv.Value)
 		config.IndexChunkOverlap = val
-		
+
 	// File Monitoring
 	case "watch_paths":
 		config.WatchPaths = strings.Split(cv.Value, ",")
@@ -248,7 +248,7 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 		for i, pattern := range config.WatchIgnorePatterns {
 			config.WatchIgnorePatterns[i] = strings.TrimSpace(pattern)
 		}
-		
+
 	// Resource Management
 	case "cpu_threshold":
 		val, _ := strconv.ParseFloat(cv.Value, 64)
@@ -262,7 +262,7 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 	case "embeddings_per_minute":
 		val, _ := strconv.Atoi(cv.Value)
 		config.RateLimitEmbeddings = val
-		
+
 	// Search
 	case "search_vector_weight":
 		val, _ := strconv.ParseFloat(cv.Value, 64)
@@ -279,7 +279,7 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 	case "search_default_limit":
 		val, _ := strconv.Atoi(cv.Value)
 		config.SearchDefaultLimit = val
-		
+
 	// Docling
 	case "docling_enabled":
 		val, _ := strconv.ParseBool(cv.Value)
@@ -293,7 +293,7 @@ func (c *DBConfigService) mapConfigValue(config *Config, cv Value) error {
 		val, _ := strconv.ParseBool(cv.Value)
 		config.DoclingFallback = val
 	}
-	
+
 	return nil
 }
 
@@ -304,48 +304,48 @@ func (c *DBConfigService) GetOllamaModels(ctx context.Context) ([]string, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config: %w", err)
 	}
-	
+
 	// Try to fetch models from Ollama API
 	url := config.OllamaHost + "/api/tags"
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return c.getFallbackModels(), nil // Return fallback on error
 	}
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return c.getFallbackModels(), nil // Return fallback on error
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return c.getFallbackModels(), nil // Return fallback on error
 	}
-	
+
 	// Parse Ollama response
 	var ollamaResp struct {
 		Models []struct {
 			Name string `json:"name"`
 		} `json:"models"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
 		return c.getFallbackModels(), nil // Return fallback on error
 	}
-	
+
 	// Extract model names
 	models := make([]string, 0, len(ollamaResp.Models))
 	for _, model := range ollamaResp.Models {
 		models = append(models, model.Name)
 	}
-	
+
 	// If no models found, return fallback
 	if len(models) == 0 {
 		return c.getFallbackModels(), nil
 	}
-	
+
 	return models, nil
 }
 
@@ -353,7 +353,7 @@ func (c *DBConfigService) GetOllamaModels(ctx context.Context) ([]string, error)
 func (c *DBConfigService) getFallbackModels() []string {
 	return []string{
 		"nomic-embed-text",
-		"mxbai-embed-large", 
+		"mxbai-embed-large",
 		"all-minilm",
 		"sentence-transformers/all-MiniLM-L6-v2",
 		"bge-large-en-v1.5",

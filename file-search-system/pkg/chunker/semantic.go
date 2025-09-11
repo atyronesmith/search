@@ -35,12 +35,12 @@ func (c *SemanticChunker) Chunk(content *extractor.ExtractedContent, config *Con
 	if len(content.Sections) > 0 {
 		return c.chunkBySections(content.Sections, config)
 	}
-	
+
 	// If pages are available (PDF), chunk by pages first
 	if len(content.Pages) > 0 {
 		return c.chunkByPages(content.Pages, config)
 	}
-	
+
 	// Fall back to paragraph-based chunking
 	return c.chunkByParagraphs(content.Text, config)
 }
@@ -51,22 +51,22 @@ func (c *SemanticChunker) chunkBySections(sections []extractor.SectionContent, c
 	currentChunk := strings.Builder{}
 	currentSections := []extractor.SectionContent{}
 	chunkIndex := 0
-	
+
 	for _, section := range sections {
 		sectionText := section.Text
-		
+
 		// If adding this section would exceed chunk size, finalize current chunk
-		if currentChunk.Len() > 0 && 
-		   countTokensApproximate(currentChunk.String()+sectionText) > config.ChunkSize {
-			
+		if currentChunk.Len() > 0 &&
+			countTokensApproximate(currentChunk.String()+sectionText) > config.ChunkSize {
+
 			chunk := c.finalizeChunk(currentChunk.String(), chunkIndex, currentSections)
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Start new chunk with overlap
 			currentChunk.Reset()
 			currentSections = []extractor.SectionContent{}
-			
+
 			// Add overlap from previous chunk if configured
 			if config.ChunkOverlap > 0 && len(chunks) > 0 {
 				overlapText := c.getOverlapText(chunks[len(chunks)-1].Content, config.ChunkOverlap)
@@ -76,38 +76,38 @@ func (c *SemanticChunker) chunkBySections(sections []extractor.SectionContent, c
 				}
 			}
 		}
-		
+
 		// Add section to current chunk
 		if currentChunk.Len() > 0 {
 			currentChunk.WriteString("\n\n")
 		}
 		currentChunk.WriteString(sectionText)
 		currentSections = append(currentSections, section)
-		
+
 		// If this is a large section, split it further
 		if countTokensApproximate(sectionText) > config.ChunkSize {
 			// Finalize current chunk
 			chunk := c.finalizeChunk(currentChunk.String(), chunkIndex, currentSections)
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Split the large section
 			subChunks := c.splitLargeSection(sectionText, chunkIndex, config)
 			chunks = append(chunks, subChunks...)
 			chunkIndex += len(subChunks)
-			
+
 			// Reset for next sections
 			currentChunk.Reset()
 			currentSections = []extractor.SectionContent{}
 		}
 	}
-	
+
 	// Finalize last chunk
 	if currentChunk.Len() > 0 {
 		chunk := c.finalizeChunk(currentChunk.String(), chunkIndex, currentSections)
 		chunks = append(chunks, chunk)
 	}
-	
+
 	return chunks, nil
 }
 
@@ -117,14 +117,14 @@ func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *Co
 	currentChunk := strings.Builder{}
 	currentPages := []int{}
 	chunkIndex := 0
-	
+
 	for _, page := range pages {
 		pageText := page.Text
-		
+
 		// If adding this page would exceed chunk size, finalize current chunk
-		if currentChunk.Len() > 0 && 
-		   countTokensApproximate(currentChunk.String()+pageText) > config.ChunkSize {
-			
+		if currentChunk.Len() > 0 &&
+			countTokensApproximate(currentChunk.String()+pageText) > config.ChunkSize {
+
 			chunk := Chunk{
 				Content:   strings.TrimSpace(currentChunk.String()),
 				Index:     chunkIndex,
@@ -138,12 +138,12 @@ func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *Co
 			}
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Start new chunk
 			currentChunk.Reset()
 			currentPages = []int{}
 		}
-		
+
 		// Add page to current chunk
 		if currentChunk.Len() > 0 {
 			currentChunk.WriteString("\n\n")
@@ -151,7 +151,7 @@ func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *Co
 		currentChunk.WriteString(pageText)
 		currentPages = append(currentPages, page.Number)
 	}
-	
+
 	// Finalize last chunk
 	if currentChunk.Len() > 0 {
 		chunk := Chunk{
@@ -167,7 +167,7 @@ func (c *SemanticChunker) chunkByPages(pages []extractor.PageContent, config *Co
 		}
 		chunks = append(chunks, chunk)
 	}
-	
+
 	return chunks, nil
 }
 
@@ -177,12 +177,12 @@ func (c *SemanticChunker) chunkByParagraphs(text string, config *Config) ([]Chun
 	var chunks []Chunk
 	currentChunk := strings.Builder{}
 	chunkIndex := 0
-	
+
 	for _, paragraph := range paragraphs {
 		// If adding this paragraph would exceed chunk size, finalize current chunk
-		if currentChunk.Len() > 0 && 
-		   countTokensApproximate(currentChunk.String()+paragraph) > config.ChunkSize {
-			
+		if currentChunk.Len() > 0 &&
+			countTokensApproximate(currentChunk.String()+paragraph) > config.ChunkSize {
+
 			chunk := Chunk{
 				Content: strings.TrimSpace(currentChunk.String()),
 				Index:   chunkIndex,
@@ -193,7 +193,7 @@ func (c *SemanticChunker) chunkByParagraphs(text string, config *Config) ([]Chun
 			}
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Start new chunk with overlap
 			currentChunk.Reset()
 			if config.ChunkOverlap > 0 && len(chunks) > 0 {
@@ -204,14 +204,14 @@ func (c *SemanticChunker) chunkByParagraphs(text string, config *Config) ([]Chun
 				}
 			}
 		}
-		
+
 		// Add paragraph to current chunk
 		if currentChunk.Len() > 0 {
 			currentChunk.WriteString("\n\n")
 		}
 		currentChunk.WriteString(paragraph)
 	}
-	
+
 	// Finalize last chunk
 	if currentChunk.Len() > 0 {
 		chunk := Chunk{
@@ -224,7 +224,7 @@ func (c *SemanticChunker) chunkByParagraphs(text string, config *Config) ([]Chun
 		}
 		chunks = append(chunks, chunk)
 	}
-	
+
 	return chunks, nil
 }
 
@@ -234,14 +234,14 @@ func (c *SemanticChunker) finalizeChunk(content string, index int, sections []ex
 		"chunking_method": "semantic",
 		"section_count":   len(sections),
 	}
-	
+
 	// Add section types to metadata
 	sectionTypes := make([]string, len(sections))
 	for i, section := range sections {
 		sectionTypes[i] = section.Type
 	}
 	metadata["section_types"] = sectionTypes
-	
+
 	return Chunk{
 		Content:  strings.TrimSpace(content),
 		Index:    index,
@@ -257,24 +257,24 @@ func (c *SemanticChunker) splitLargeSection(text string, startIndex int, config 
 	var chunks []Chunk
 	currentChunk := strings.Builder{}
 	chunkIndex := startIndex
-	
+
 	for _, sentence := range sentences {
 		// If adding this sentence would exceed chunk size, finalize current chunk
-		if currentChunk.Len() > 0 && 
-		   countTokensApproximate(currentChunk.String()+sentence) > config.ChunkSize {
-			
+		if currentChunk.Len() > 0 &&
+			countTokensApproximate(currentChunk.String()+sentence) > config.ChunkSize {
+
 			chunk := Chunk{
 				Content: strings.TrimSpace(currentChunk.String()),
 				Index:   chunkIndex,
 				Type:    "semantic",
 				Metadata: map[string]interface{}{
-					"chunking_method": "sentence",
+					"chunking_method":    "sentence",
 					"from_large_section": true,
 				},
 			}
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Start new chunk with overlap
 			currentChunk.Reset()
 			if config.ChunkOverlap > 0 && len(chunks) > 0 {
@@ -285,14 +285,14 @@ func (c *SemanticChunker) splitLargeSection(text string, startIndex int, config 
 				}
 			}
 		}
-		
+
 		// Add sentence to current chunk
 		if currentChunk.Len() > 0 {
 			currentChunk.WriteString(" ")
 		}
 		currentChunk.WriteString(sentence)
 	}
-	
+
 	// Finalize last chunk
 	if currentChunk.Len() > 0 {
 		chunk := Chunk{
@@ -300,13 +300,13 @@ func (c *SemanticChunker) splitLargeSection(text string, startIndex int, config 
 			Index:   chunkIndex,
 			Type:    "semantic",
 			Metadata: map[string]interface{}{
-				"chunking_method": "sentence",
+				"chunking_method":    "sentence",
 				"from_large_section": true,
 			},
 		}
 		chunks = append(chunks, chunk)
 	}
-	
+
 	return chunks
 }
 
@@ -315,10 +315,10 @@ func (c *SemanticChunker) getOverlapText(text string, overlapSize int) string {
 	if len(text) <= overlapSize {
 		return text
 	}
-	
+
 	// Find a good breaking point (sentence or paragraph boundary)
 	start := len(text) - overlapSize
-	
+
 	// Look for sentence boundary
 	for i := start; i < len(text); i++ {
 		if text[i] == '.' || text[i] == '!' || text[i] == '?' {
@@ -327,20 +327,20 @@ func (c *SemanticChunker) getOverlapText(text string, overlapSize int) string {
 			}
 		}
 	}
-	
+
 	// Look for paragraph boundary
 	for i := start; i < len(text); i++ {
 		if i+1 < len(text) && text[i] == '\n' && text[i+1] == '\n' {
 			return strings.TrimSpace(text[i+2:])
 		}
 	}
-	
+
 	// Fall back to word boundary
 	for i := start; i < len(text); i++ {
 		if text[i] == ' ' {
 			return strings.TrimSpace(text[i+1:])
 		}
 	}
-	
+
 	return text[start:]
 }

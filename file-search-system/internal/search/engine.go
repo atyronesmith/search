@@ -20,18 +20,18 @@ import (
 
 // Engine represents the hybrid search engine
 type Engine struct {
-	db         *database.DB
-	embedder   *embeddings.OllamaClient
-	config     *Config
-	log        *logrus.Logger
-	cache      *Cache
-	processor  *QueryProcessor
+	db          *database.DB
+	embedder    *embeddings.OllamaClient
+	config      *Config
+	log         *logrus.Logger
+	cache       *Cache
+	processor   *QueryProcessor
 	llmEnhancer *LLMEnhancer
 	// Track last executed queries for debug purposes
 	lastVectorQuery string
 	lastTextQuery   string
 	// Store debug info for non-LLM queries
-	lastDebugInfo   *DebugInfo
+	lastDebugInfo *DebugInfo
 }
 
 // Config holds search engine configuration
@@ -92,40 +92,40 @@ type Request struct {
 	MinSize        int64                  `json:"min_size,omitempty"`
 	MaxSize        int64                  `json:"max_size,omitempty"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
-	SearchType     string                 `json:"search_type"` // "hybrid", "vector", "text"
+	SearchType     string                 `json:"search_type"`               // "hybrid", "vector", "text"
 	ContentFilters []ContentFilter        `json:"content_filters,omitempty"` // LLM-derived content filters
 	RequiresCount  bool                   `json:"requires_count,omitempty"`  // Whether this is a counting query
 }
 
 // Response represents search results
 type Response struct {
-	Query           string          `json:"query"`
-	EnhancedQuery   *EnhancedQuery  `json:"enhanced_query,omitempty"` // LLM-enhanced query details
-	Results         []Result  `json:"results"`
-	TotalCount      int             `json:"total_count"`
-	SearchTime      time.Duration   `json:"search_time"`
-	Cached          bool            `json:"cached"`
-	UsedLLM         bool            `json:"used_llm"`              // Whether LLM enhancement was used
+	Query         string         `json:"query"`
+	EnhancedQuery *EnhancedQuery `json:"enhanced_query,omitempty"` // LLM-enhanced query details
+	Results       []Result       `json:"results"`
+	TotalCount    int            `json:"total_count"`
+	SearchTime    time.Duration  `json:"search_time"`
+	Cached        bool           `json:"cached"`
+	UsedLLM       bool           `json:"used_llm"` // Whether LLM enhancement was used
 }
 
 // Result represents a single search result
 type Result struct {
-	FileID         int64                  `json:"file_id"`
-	ChunkID        int64                  `json:"chunk_id"`
-	FilePath       string                 `json:"file_path"`
-	Filename       string                 `json:"filename"`
-	FileType       string                 `json:"file_type"`
-	Content        string                 `json:"content"`
-	Score          float64                `json:"score"`
-	VectorScore    float64                `json:"vector_score"`
-	TextScore      float64                `json:"text_score"`
-	MetadataScore  float64                `json:"metadata_score"`
-	Highlights     []string               `json:"highlights"`
-	StartLine      *int                   `json:"start_line,omitempty"`
-	EndLine        *int                   `json:"end_line,omitempty"`
-	CharStart      int                    `json:"char_start"`
-	CharEnd        int                    `json:"char_end"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	FileID        int64                  `json:"file_id"`
+	ChunkID       int64                  `json:"chunk_id"`
+	FilePath      string                 `json:"file_path"`
+	Filename      string                 `json:"filename"`
+	FileType      string                 `json:"file_type"`
+	Content       string                 `json:"content"`
+	Score         float64                `json:"score"`
+	VectorScore   float64                `json:"vector_score"`
+	TextScore     float64                `json:"text_score"`
+	MetadataScore float64                `json:"metadata_score"`
+	Highlights    []string               `json:"highlights"`
+	StartLine     *int                   `json:"start_line,omitempty"`
+	EndLine       *int                   `json:"end_line,omitempty"`
+	CharStart     int                    `json:"char_start"`
+	CharEnd       int                    `json:"char_end"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // NewEngine creates a new search engine
@@ -133,10 +133,10 @@ func NewEngine(db *database.DB, embedder *embeddings.OllamaClient, config *Confi
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
+
 	// Initialize LLM enhancer with configurable model
 	llmEnhancer := NewLLMEnhancer(ollamaHost, llmModel, db)
-	
+
 	return &Engine{
 		db:          db,
 		embedder:    embedder,
@@ -151,19 +151,19 @@ func NewEngine(db *database.DB, embedder *embeddings.OllamaClient, config *Confi
 // Search performs a hybrid search
 func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 	startTime := time.Now()
-	
+
 	// Clear previous query tracking and debug info
 	e.lastVectorQuery = ""
 	e.lastTextQuery = ""
 	e.lastDebugInfo = nil
-	
+
 	// Clear LLM enhancer's debug info as well
 	if e.llmEnhancer != nil {
 		e.llmEnhancer.setDebugInfo("", "", "", "", 0)
 	}
-	
+
 	e.log.WithField("query", req.Query).Info("DEBUG: Starting search with cleared debug info")
-	
+
 	// Log incoming request at debug level
 	e.log.WithFields(logrus.Fields{
 		"query":       req.Query,
@@ -171,12 +171,12 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 		"limit":       req.Limit,
 		"offset":      req.Offset,
 	}).Debug("Incoming search request")
-	
+
 	// Validate request
 	if err := e.validateRequest(req); err != nil {
 		return nil, err
 	}
-	
+
 	// First, try LLM enhancement for complex queries
 	var enhancedQuery *EnhancedQuery
 	if e.llmEnhancer != nil && e.llmEnhancer.IsEnabled() {
@@ -217,7 +217,7 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 	if enhancedQuery != nil {
 		e.applyLLMEnhancements(req, enhancedQuery, processedQuery)
 	}
-	
+
 	// Log processed query details at debug level
 	e.log.WithFields(logrus.Fields{
 		"original_query": processedQuery.Original,
@@ -225,7 +225,7 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 		"phrases":        processedQuery.Phrases,
 		"query_type":     processedQuery.QueryType,
 	}).Debug("Query processing results")
-	
+
 	// Update request with processed information
 	if processedQuery != nil {
 		// Apply extracted filters to the request
@@ -233,21 +233,21 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 			req.FileTypes = append(req.FileTypes, processedQuery.FileTypes...)
 			e.log.WithField("file_types", processedQuery.FileTypes).Debug("Applied file type filters")
 		}
-		
+
 		// Apply date range filters
 		if processedQuery.DateRange != nil {
 			req.DateFrom = &processedQuery.DateRange.From
 			req.DateTo = &processedQuery.DateRange.To
 			e.log.WithField("date_range", processedQuery.DateRange).Debug("Applied date range filters")
 		}
-		
-		// Apply size range filters  
+
+		// Apply size range filters
 		if processedQuery.SizeRange != nil {
 			req.MinSize = processedQuery.SizeRange.Min
 			req.MaxSize = processedQuery.SizeRange.Max
 			e.log.WithField("size_range", processedQuery.SizeRange).Debug("Applied size range filters")
 		}
-		
+
 		// Use cleaned query (with filters removed) for actual search
 		if processedQuery.Cleaned != "" {
 			req.Query = processedQuery.Cleaned
@@ -261,14 +261,14 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 			req.Query = "the"
 			e.log.Debug("Empty query with filters, using generic word search")
 		}
-		
+
 		// For phrase queries, always prefer text search for exact matching
 		if len(processedQuery.Phrases) > 0 {
 			req.SearchType = "text"
 			e.log.WithField("phrases", processedQuery.Phrases).Debug("Set search type to text for phrase search")
 		}
 	}
-	
+
 	// Check cache (use original query for cache key consistency)
 	cacheKey := e.generateCacheKey(req)
 	if cached := e.cache.Get(cacheKey); cached != nil {
@@ -276,24 +276,24 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 		cached.Cached = true
 		return cached, nil
 	}
-	
+
 	// Determine search type
 	searchType := req.SearchType
 	e.log.WithFields(logrus.Fields{
 		"requested_search_type": req.SearchType,
-		"query": req.Query,
+		"query":                 req.Query,
 	}).Info("DEBUG: Checking search type")
-	
+
 	// For non-LLM queries, always use text-only search
 	// Check if we actually used LLM (have debug info with prompt)
 	usedLLM := e.llmEnhancer != nil && e.llmEnhancer.GetDebugInfo() != nil && e.llmEnhancer.GetDebugInfo().Prompt != ""
-	
+
 	// If no search type specified or it's hybrid, determine based on query
 	if searchType == "" || searchType == "hybrid" {
 		if usedLLM && enhancedQuery != nil && enhancedQuery.VectorTerms != nil && len(enhancedQuery.VectorTerms) > 0 {
 			searchType = "hybrid"
 			e.log.WithFields(logrus.Fields{
-				"query": req.Query,
+				"query":        req.Query,
 				"vector_terms": enhancedQuery.VectorTerms,
 			}).Info("Using hybrid search with LLM vector terms")
 		} else {
@@ -301,9 +301,9 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 			e.log.WithField("query", req.Query).Info("Using text-only search for simple query")
 		}
 	}
-	
+
 	var results []Result
-	
+
 	switch searchType {
 	case "vector":
 		results, err = e.vectorSearch(ctx, req)
@@ -314,11 +314,11 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 	default:
 		return nil, fmt.Errorf("invalid search type: %s", searchType)
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Store debug info based on whether LLM was used
 	if e.llmEnhancer != nil && e.llmEnhancer.GetDebugInfo() != nil {
 		// LLM was used - copy the debug info and add SQL queries
@@ -340,14 +340,14 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 			Timestamp:   time.Now().Format(time.RFC3339),
 			Query:       req.Query,
 			Model:       "none",
-			Prompt:      "",  // No prompt for non-LLM queries
-			Response:    "",  // No response for non-LLM queries
+			Prompt:      "", // No prompt for non-LLM queries
+			Response:    "", // No response for non-LLM queries
 			ProcessTime: 0,
-			VectorQuery: e.lastVectorQuery,  // Will be empty for text-only searches
-			TextQuery:   e.lastTextQuery,     // Will be empty for vector-only searches
+			VectorQuery: e.lastVectorQuery, // Will be empty for text-only searches
+			TextQuery:   e.lastTextQuery,   // Will be empty for vector-only searches
 		}
 	}
-	
+
 	// Apply content filters from LLM enhancement
 	if len(req.ContentFilters) > 0 {
 		results, err = e.applyContentFilters(ctx, results, req.ContentFilters)
@@ -355,18 +355,18 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 			e.log.WithError(err).Debug("Content filtering failed, continuing with unfiltered results")
 		}
 	}
-	
+
 	// Note: Exact term filtering for single-word queries is now handled at the database level
 	// in the vector search function using WHERE clauses for better performance
-	
+
 	// Apply metadata filters
 	results = e.applyFilters(results, req)
-	
+
 	// Sort by score
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
-	
+
 	// Apply pagination
 	totalCount := len(results)
 	if req.Offset > 0 && req.Offset < len(results) {
@@ -375,20 +375,20 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 	if req.Limit > 0 && req.Limit < len(results) {
 		results = results[:req.Limit]
 	}
-	
+
 	// Generate highlights
 	for i := range results {
 		results[i].Highlights = e.generateHighlights(results[i].Content, req.Query)
 	}
-	
+
 	// Ensure results is never null
 	if results == nil {
 		results = []Result{}
 	}
-	
+
 	// Check again if LLM was actually used (for used_llm flag)
 	usedLLMFlag := e.lastDebugInfo != nil && e.lastDebugInfo.Model != "none" && e.lastDebugInfo.Prompt != ""
-	
+
 	response := &Response{
 		Query:         req.Query,
 		EnhancedQuery: enhancedQuery,
@@ -398,17 +398,17 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 		Cached:        false,
 		UsedLLM:       usedLLMFlag,
 	}
-	
+
 	// Cache results
 	e.cache.Set(cacheKey, response)
-	
+
 	e.log.WithFields(logrus.Fields{
 		"query":       req.Query,
 		"results":     len(results),
 		"search_time": response.SearchTime,
 		"search_type": searchType,
 	}).Info("Search completed")
-	
+
 	return response, nil
 }
 
@@ -418,7 +418,7 @@ func (e *Engine) hybridSearch(ctx context.Context, req *Request, processedQuery 
 	vectorChan := make(chan []Result, 1)
 	textChan := make(chan []Result, 1)
 	errChan := make(chan error, 2)
-	
+
 	// Vector search
 	go func() {
 		results, err := e.vectorSearch(ctx, req)
@@ -428,7 +428,7 @@ func (e *Engine) hybridSearch(ctx context.Context, req *Request, processedQuery 
 		}
 		vectorChan <- results
 	}()
-	
+
 	// Text search
 	go func() {
 		results, err := e.textSearch(ctx, req, processedQuery)
@@ -438,7 +438,7 @@ func (e *Engine) hybridSearch(ctx context.Context, req *Request, processedQuery 
 		}
 		textChan <- results
 	}()
-	
+
 	// Wait for both results
 	var vectorResults, textResults []Result
 	for i := 0; i < 2; i++ {
@@ -453,12 +453,12 @@ func (e *Engine) hybridSearch(ctx context.Context, req *Request, processedQuery 
 			return nil, ctx.Err()
 		}
 	}
-	
+
 	e.log.WithFields(logrus.Fields{
 		"vector_results": len(vectorResults),
-		"text_results": len(textResults),
+		"text_results":   len(textResults),
 	}).Debug("Hybrid search combining results")
-	
+
 	// Combine and rank results
 	return e.combineResults(vectorResults, textResults, req)
 }
@@ -469,35 +469,35 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 	if strings.TrimSpace(req.Query) == "" {
 		return []Result{}, nil // Return empty results for empty queries
 	}
-	
+
 	// Generate query embedding
 	embedding, err := e.embedder.Embed(ctx, req.Query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
-	
+
 	// Handle empty embedding response
 	if len(embedding) == 0 {
 		return []Result{}, nil // Return empty results for empty embeddings
 	}
-	
+
 	// Convert float64 embedding to float32 for pgvector
 	float32Embedding := make([]float32, len(embedding))
 	for i, v := range embedding {
 		float32Embedding[i] = float32(v)
 	}
 	vec := pgvector.NewVector(float32Embedding)
-	
+
 	// Build query with date filtering and optional exact term filtering
 	whereClause, dateArgs := e.buildDateFilter(req)
-	
+
 	// Add exact term filtering for single-word queries to improve precision
 	exactTermFilter := ""
 	if isSimpleWordQuery(req.Query) {
 		exactTermFilter = " AND c.content ILIKE $" + fmt.Sprintf("%d", len(dateArgs)+2)
 		dateArgs = append(dateArgs, "%"+strings.TrimSpace(req.Query)+"%")
 	}
-	
+
 	query := `
 		SELECT 
 			c.id as chunk_id,
@@ -518,31 +518,31 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 		ORDER BY c.embedding <=> $1
 		LIMIT $` + fmt.Sprintf("%d", len(dateArgs)+2) + `
 	`
-	
+
 	limit := req.Limit * 3 // Get more results for filtering
 	if limit <= 0 {
 		limit = e.config.DefaultLimit * 3
 	}
-	
+
 	// Build query arguments: embedding, date args, limit
 	args := []interface{}{vec}
 	args = append(args, dateArgs...)
 	args = append(args, limit)
-	
+
 	// Store the query with substituted parameters for debugging
 	e.lastVectorQuery = substituteSQLParams(query, args)
-	
+
 	rows, err := e.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("vector search query failed: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var results []Result
 	for rows.Next() {
 		var result Result
 		var chunkMetadata, fileMetadata json.RawMessage
-		
+
 		err := rows.Scan(
 			&result.ChunkID,
 			&result.FileID,
@@ -561,20 +561,20 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 			e.log.WithError(err).Error("Failed to scan vector search result")
 			continue
 		}
-		
+
 		// Parse metadata
 		result.Metadata = make(map[string]interface{})
 		if len(chunkMetadata) > 0 {
 			json.Unmarshal(chunkMetadata, &result.Metadata)
 		}
-		
+
 		// Normalize vector score
 		result.VectorScore = e.normalizeVectorScore(result.VectorScore)
 		result.Score = result.VectorScore // Initial score
-		
+
 		results = append(results, result)
 	}
-	
+
 	return results, nil
 }
 
@@ -582,20 +582,20 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *ProcessedQuery) ([]Result, error) {
 	// Prepare query for full-text search
 	tsQuery := e.prepareTextSearchQuery(req.Query, processedQuery)
-	
+
 	// Log the prepared query for debugging
 	e.log.WithFields(logrus.Fields{
 		"original_query": req.Query,
 		"prepared_query": tsQuery,
 	}).Debug("Prepared text search query")
-	
+
 	// Build query with date filtering
 	whereClause, dateArgs := e.buildDateFilterForTextSearch(req)
-	
+
 	// Determine if we should use to_tsquery or plainto_tsquery
 	// Use to_tsquery if we have a properly formatted query with operators
 	queryFunction := "plainto_tsquery"
-	
+
 	// Check if tsQuery contains PostgreSQL operators (result of conversion)
 	if strings.Contains(tsQuery, "&") || strings.Contains(tsQuery, "|") || strings.Contains(tsQuery, "!") {
 		queryFunction = "to_tsquery"
@@ -603,7 +603,7 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 	} else {
 		e.log.WithField("query_function", "plainto_tsquery").Debug("Using plainto_tsquery for simple terms")
 	}
-	
+
 	query := fmt.Sprintf(`
 		SELECT 
 			ts.chunk_id,
@@ -628,33 +628,33 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 		ORDER BY rank DESC
 		LIMIT $%d
 	`, queryFunction, queryFunction, queryFunction, whereClause, len(dateArgs)+2)
-	
+
 	limit := req.Limit * 3
 	if limit <= 0 {
 		limit = e.config.DefaultLimit * 3
 	}
-	
+
 	// Build query arguments: tsQuery, date args, limit
 	args := []interface{}{tsQuery}
 	args = append(args, dateArgs...)
 	args = append(args, limit)
-	
+
 	// Store the query with substituted parameters for debugging
 	e.lastTextQuery = substituteSQLParams(query, args)
-	
+
 	rows, err := e.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("text search query failed: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var results []Result
 	resultCount := 0
 	for rows.Next() {
 		var result Result
 		var chunkMetadata, fileMetadata json.RawMessage
 		var headline string
-		
+
 		err := rows.Scan(
 			&result.ChunkID,
 			&result.FileID,
@@ -674,43 +674,43 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 			e.log.WithError(err).Error("Failed to scan text search result")
 			continue
 		}
-		
+
 		resultCount++
-		
+
 		// Parse metadata
 		result.Metadata = make(map[string]interface{})
 		if len(chunkMetadata) > 0 {
 			json.Unmarshal(chunkMetadata, &result.Metadata)
 		}
-		
+
 		// Extract highlights from headline
 		result.Highlights = e.extractHighlights(headline)
-		
+
 		// Normalize text score
 		result.TextScore = e.normalizeTextScore(result.TextScore)
 		result.Score = result.TextScore
-		
+
 		results = append(results, result)
 	}
-	
+
 	e.log.WithFields(logrus.Fields{
-		"query": tsQuery,
-		"result_count": resultCount,
+		"query":          tsQuery,
+		"result_count":   resultCount,
 		"returned_count": len(results),
 	}).Info("DEBUG: Text search completed")
-	
+
 	// Log first few results for debugging
 	for i, r := range results {
 		if i < 3 {
 			e.log.WithFields(logrus.Fields{
-				"index": i,
-				"chunk_id": r.ChunkID,
-				"file_path": r.FilePath,
+				"index":      i,
+				"chunk_id":   r.ChunkID,
+				"file_path":  r.FilePath,
 				"text_score": r.TextScore,
 			}).Debug("Text search result detail")
 		}
 	}
-	
+
 	return results, nil
 }
 
@@ -719,45 +719,45 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 	// Log incoming results for debugging
 	e.log.WithFields(logrus.Fields{
 		"vector_count": len(vectorResults),
-		"text_count": len(textResults),
-		"query": req.Query,
+		"text_count":   len(textResults),
+		"query":        req.Query,
 	}).Info("DEBUG: combineResults called")
-	
+
 	// Log details of text results if present
 	if len(textResults) > 0 {
 		for i, tr := range textResults {
 			if i < 3 { // Log first 3 for brevity
 				e.log.WithFields(logrus.Fields{
-					"index": i,
-					"chunk_id": tr.ChunkID,
-					"file_path": tr.FilePath,
+					"index":      i,
+					"chunk_id":   tr.ChunkID,
+					"file_path":  tr.FilePath,
 					"text_score": tr.TextScore,
 				}).Debug("Text result in combineResults")
 			}
 		}
 	}
-	
+
 	// Use Reciprocal Rank Fusion (RRF) for better hybrid search
 	// RRF formula: score = 1 / (k + rank) where k = 60 (common choice)
 	const rrfK = 60.0
-	
+
 	// Create rank maps for RRF calculation
 	vectorRanks := make(map[int64]int)
 	textRanks := make(map[int64]int)
-	
+
 	// Assign ranks to vector results (1-based)
 	for i, vr := range vectorResults {
 		vectorRanks[vr.ChunkID] = i + 1
 	}
-	
-	// Assign ranks to text results (1-based)  
+
+	// Assign ranks to text results (1-based)
 	for i, tr := range textResults {
 		textRanks[tr.ChunkID] = i + 1
 	}
-	
+
 	// Create a map to combine results by chunk ID
 	resultMap := make(map[int64]*Result)
-	
+
 	// Process all unique chunk IDs from both result sets
 	allChunkIDs := make(map[int64]bool)
 	for _, vr := range vectorResults {
@@ -766,12 +766,12 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 	for _, tr := range textResults {
 		allChunkIDs[tr.ChunkID] = true
 	}
-	
+
 	// Calculate RRF scores for each chunk
 	for chunkID := range allChunkIDs {
 		var result *Result
 		var vectorRRF, textRRF float64
-		
+
 		// Get vector result if exists
 		for _, vr := range vectorResults {
 			if vr.ChunkID == chunkID {
@@ -782,7 +782,7 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 				break
 			}
 		}
-		
+
 		// Get text result if exists (and merge with vector result)
 		for _, tr := range textResults {
 			if tr.ChunkID == chunkID {
@@ -799,34 +799,34 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 				break
 			}
 		}
-		
+
 		if result != nil {
 			// Calculate combined RRF score
 			result.Score = vectorRRF + textRRF
-			
+
 			e.log.WithFields(logrus.Fields{
-				"chunk_id": chunkID,
-				"vector_rrf": vectorRRF,
-				"text_rrf": textRRF,
+				"chunk_id":       chunkID,
+				"vector_rrf":     vectorRRF,
+				"text_rrf":       textRRF,
 				"combined_score": result.Score,
-				"has_vector": vectorRRF > 0,
-				"has_text": textRRF > 0,
+				"has_vector":     vectorRRF > 0,
+				"has_text":       textRRF > 0,
 			}).Debug("RRF score calculation")
-			
+
 			resultMap[chunkID] = result
 		}
 	}
-	
+
 	// Calculate metadata scores and finalize results
 	var results []Result
 	for _, result := range resultMap {
 		// Calculate metadata score
 		metadataScore := e.calculateMetadataScore(result, req)
 		result.MetadataScore = metadataScore
-		
+
 		// Add metadata score to RRF score (small weight to preserve RRF dominance)
 		result.Score += metadataScore * e.config.MetadataWeight
-		
+
 		// Store individual scores for debugging and UI display
 		if _, ok := vectorRanks[result.ChunkID]; ok {
 			// Keep original vector score for display
@@ -834,41 +834,41 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 		if _, ok := textRanks[result.ChunkID]; ok {
 			// Keep original text score for display
 		}
-		
+
 		// Apply minimum score threshold (adjusted for RRF scale)
 		// RRF scores are typically much smaller than weighted scores
 		minRRFScore := 0.01 // Roughly equivalent to being in top 100 results
-		
+
 		e.log.WithFields(logrus.Fields{
-			"chunk_id": result.ChunkID,
-			"score": result.Score,
-			"text_score": result.TextScore,
-			"vector_score": result.VectorScore,
+			"chunk_id":       result.ChunkID,
+			"score":          result.Score,
+			"text_score":     result.TextScore,
+			"vector_score":   result.VectorScore,
 			"metadata_score": result.MetadataScore,
-			"min_threshold": minRRFScore,
-			"passed": result.Score >= minRRFScore,
+			"min_threshold":  minRRFScore,
+			"passed":         result.Score >= minRRFScore,
 		}).Debug("Result score check")
-		
+
 		if result.Score >= minRRFScore {
 			results = append(results, *result)
 		}
 	}
-	
+
 	// Log final results
 	e.log.WithFields(logrus.Fields{
 		"input_vector_count": len(vectorResults),
-		"input_text_count": len(textResults),
-		"output_count": len(results),
-		"min_threshold": 0.01, // minRRFScore value
+		"input_text_count":   len(textResults),
+		"output_count":       len(results),
+		"min_threshold":      0.01, // minRRFScore value
 	}).Info("DEBUG: combineResults returning")
-	
+
 	return results, nil
 }
 
 // calculateMetadataScore calculates score based on metadata factors
 func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 	score := 0.5 // Base score
-	
+
 	// File type relevance
 	if req.FileTypes != nil && len(req.FileTypes) > 0 {
 		for _, ft := range req.FileTypes {
@@ -878,7 +878,7 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 			}
 		}
 	}
-	
+
 	// Path relevance
 	if req.Paths != nil && len(req.Paths) > 0 {
 		for _, path := range req.Paths {
@@ -888,7 +888,7 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 			}
 		}
 	}
-	
+
 	// Extension match
 	if req.Extensions != nil && len(req.Extensions) > 0 {
 		for _, ext := range req.Extensions {
@@ -898,12 +898,12 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 			}
 		}
 	}
-	
+
 	// Normalize to 0-1 range
 	if score > 1.0 {
 		score = 1.0
 	}
-	
+
 	return score
 }
 
@@ -911,11 +911,11 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 func (e *Engine) buildDateFilter(req *Request) (string, []interface{}) {
 	var whereClause string
 	var args []interface{}
-	
+
 	if req.DateFrom == nil && req.DateTo == nil {
 		return "", args
 	}
-	
+
 	// Determine which date field to filter on
 	dateField := "f.modified_at" // default
 	if req.Metadata != nil {
@@ -927,28 +927,28 @@ func (e *Engine) buildDateFilter(req *Request) (string, []interface{}) {
 			}
 		}
 	}
-	
+
 	argIndex := 2 // Start at 2 because $1 is the embedding vector
-	
+
 	if req.DateFrom != nil {
 		whereClause += fmt.Sprintf(" AND %s >= $%d", dateField, argIndex)
 		args = append(args, *req.DateFrom)
 		argIndex++
 	}
-	
+
 	if req.DateTo != nil {
 		whereClause += fmt.Sprintf(" AND %s <= $%d", dateField, argIndex)
 		args = append(args, *req.DateTo)
 		argIndex++
 	}
-	
+
 	e.log.WithFields(logrus.Fields{
-		"date_field": dateField,
-		"date_from":  req.DateFrom,
-		"date_to":    req.DateTo,
+		"date_field":   dateField,
+		"date_from":    req.DateFrom,
+		"date_to":      req.DateTo,
 		"where_clause": whereClause,
 	}).Debug("Built date filter")
-	
+
 	return whereClause, args
 }
 
@@ -956,11 +956,11 @@ func (e *Engine) buildDateFilter(req *Request) (string, []interface{}) {
 func (e *Engine) buildDateFilterForTextSearch(req *Request) (string, []interface{}) {
 	var whereClause string
 	var args []interface{}
-	
+
 	if req.DateFrom == nil && req.DateTo == nil {
 		return "", args
 	}
-	
+
 	// Determine which date field to filter on
 	dateField := "f.modified_at" // default
 	if req.Metadata != nil {
@@ -972,28 +972,28 @@ func (e *Engine) buildDateFilterForTextSearch(req *Request) (string, []interface
 			}
 		}
 	}
-	
+
 	argIndex := 2 // Start at 2 because $1 is the tsQuery
-	
+
 	if req.DateFrom != nil {
 		whereClause += fmt.Sprintf(" AND %s >= $%d", dateField, argIndex)
 		args = append(args, *req.DateFrom)
 		argIndex++
 	}
-	
+
 	if req.DateTo != nil {
 		whereClause += fmt.Sprintf(" AND %s <= $%d", dateField, argIndex)
 		args = append(args, *req.DateTo)
 		argIndex++
 	}
-	
+
 	e.log.WithFields(logrus.Fields{
-		"date_field": dateField,
-		"date_from":  req.DateFrom,
-		"date_to":    req.DateTo,
+		"date_field":   dateField,
+		"date_from":    req.DateFrom,
+		"date_to":      req.DateTo,
 		"where_clause": whereClause,
 	}).Debug("Built date filter for text search")
-	
+
 	return whereClause, args
 }
 
@@ -1001,23 +1001,23 @@ func (e *Engine) buildDateFilterForTextSearch(req *Request) (string, []interface
 func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 	// Log what filters are being applied
 	e.log.WithFields(logrus.Fields{
-		"input_count": len(results),
+		"input_count":    len(results),
 		"has_file_types": req.FileTypes != nil && len(req.FileTypes) > 0,
-		"file_types": req.FileTypes,
+		"file_types":     req.FileTypes,
 		"has_extensions": req.Extensions != nil && len(req.Extensions) > 0,
-		"has_paths": req.Paths != nil && len(req.Paths) > 0,
-		"has_date_from": req.DateFrom != nil,
-		"has_date_to": req.DateTo != nil,
-		"min_size": req.MinSize,
-		"max_size": req.MaxSize,
+		"has_paths":      req.Paths != nil && len(req.Paths) > 0,
+		"has_date_from":  req.DateFrom != nil,
+		"has_date_to":    req.DateTo != nil,
+		"min_size":       req.MinSize,
+		"max_size":       req.MaxSize,
 	}).Info("DEBUG: applyFilters called")
-	
+
 	if req.FileTypes == nil && req.Extensions == nil && req.Paths == nil &&
-	   req.DateFrom == nil && req.DateTo == nil &&
-	   req.MinSize == 0 && req.MaxSize == 0 {
+		req.DateFrom == nil && req.DateTo == nil &&
+		req.MinSize == 0 && req.MaxSize == 0 {
 		return results
 	}
-	
+
 	var filtered []Result
 	for _, result := range results {
 		// File type filter
@@ -1044,7 +1044,7 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 				continue
 			}
 		}
-		
+
 		// Extension filter
 		if req.Extensions != nil && len(req.Extensions) > 0 {
 			found := false
@@ -1058,7 +1058,7 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 				continue
 			}
 		}
-		
+
 		// Path filter
 		if req.Paths != nil && len(req.Paths) > 0 {
 			found := false
@@ -1072,15 +1072,15 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 				continue
 			}
 		}
-		
+
 		filtered = append(filtered, result)
 	}
-	
+
 	e.log.WithFields(logrus.Fields{
-		"input_count": len(results),
+		"input_count":  len(results),
 		"output_count": len(filtered),
 	}).Info("DEBUG: applyFilters returning")
-	
+
 	return filtered
 }
 
@@ -1091,10 +1091,10 @@ func (e *Engine) applyContentFilters(ctx context.Context, results []Result, filt
 	}
 
 	var filtered []Result
-	
+
 	for _, result := range results {
 		passesFilters := true
-		
+
 		for _, filter := range filters {
 			passes, err := e.evaluateContentFilter(ctx, result, filter)
 			if err != nil {
@@ -1105,31 +1105,31 @@ func (e *Engine) applyContentFilters(ctx context.Context, results []Result, filt
 				// On error, assume it passes to avoid false negatives
 				continue
 			}
-			
+
 			if !passes {
 				passesFilters = false
 				break
 			}
 		}
-		
+
 		if passesFilters {
 			filtered = append(filtered, result)
 		}
 	}
-	
+
 	e.log.WithFields(logrus.Fields{
 		"original_count": len(results),
 		"filtered_count": len(filtered),
 		"filter_count":   len(filters),
 	}).Debug("Applied content filters")
-	
+
 	return filtered, nil
 }
 
 // evaluateContentFilter evaluates a single content filter against a search result
 func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filter ContentFilter) (bool, error) {
 	content := strings.ToLower(result.Content)
-	
+
 	switch filter.Type {
 	case "contains":
 		// Check if content contains all specified keywords
@@ -1139,13 +1139,13 @@ func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filte
 			}
 		}
 		return true, nil
-		
+
 	case "pattern":
 		// Use regex pattern matching
 		if filter.Pattern == "" {
 			return true, nil
 		}
-		
+
 		// Handle special patterns
 		switch strings.ToLower(filter.Description) {
 		case "social security number", "ssn":
@@ -1161,7 +1161,7 @@ func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filte
 				}
 			}
 			return false, nil
-			
+
 		case "credit card", "credit card number":
 			// Credit card patterns: XXXX-XXXX-XXXX-XXXX, XXXXXXXXXXXXXXXX
 			patterns := []string{
@@ -1174,13 +1174,13 @@ func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filte
 				}
 			}
 			return false, nil
-			
+
 		case "table", "financial table":
 			// Look for table-like patterns in text
 			patterns := []string{
-				`\|\s*[^|]+\s*\|`,  // Markdown table syntax
-				`\t.*\t.*\t`,       // Tab-separated values
-				`\$[\d,]+\.?\d*`,   // Dollar amounts
+				`\|\s*[^|]+\s*\|`, // Markdown table syntax
+				`\t.*\t.*\t`,      // Tab-separated values
+				`\$[\d,]+\.?\d*`,  // Dollar amounts
 				`\b(total|sum|amount|balance|price|cost|revenue|profit)\s*:?\s*\$?[\d,]+\.?\d*`,
 			}
 			for _, pattern := range patterns {
@@ -1190,29 +1190,29 @@ func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filte
 			}
 			return false, nil
 		}
-		
+
 		// Default regex pattern matching
 		matched, err := regexp.MatchString(filter.Pattern, result.Content)
 		return matched, err
-		
+
 	case "semantic":
 		// Use vector similarity for semantic matching
 		if e.embedder == nil {
 			e.log.Debug("Embedder not available for semantic filtering")
 			return true, nil // Assume passes if we can't evaluate
 		}
-		
+
 		// Generate query embedding from filter keywords
 		queryText := strings.Join(filter.Keywords, " ")
 		if filter.Description != "" {
 			queryText = filter.Description + " " + queryText
 		}
-		
+
 		queryEmbedding, err := e.embedder.Embed(ctx, queryText)
 		if err != nil {
 			return false, fmt.Errorf("failed to generate query embedding: %w", err)
 		}
-		
+
 		// Get chunk embedding from database (this would need to be implemented)
 		// For now, use a simple keyword check as fallback
 		for _, keyword := range filter.Keywords {
@@ -1220,13 +1220,13 @@ func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filte
 				return true, nil
 			}
 		}
-		
+
 		// If no simple keyword match, compute similarity (placeholder logic)
 		_ = queryEmbedding // Use when implementing actual vector similarity
-		
+
 		// For now, return true if any keywords match
 		return len(filter.Keywords) == 0, nil
-		
+
 	default:
 		e.log.WithField("filter_type", filter.Type).Debug("Unknown content filter type")
 		return true, nil
@@ -1236,32 +1236,32 @@ func (e *Engine) evaluateContentFilter(ctx context.Context, result Result, filte
 // isSimpleWordQuery checks if the query is a simple single word that would benefit from exact filtering
 func isSimpleWordQuery(query string) bool {
 	trimmed := strings.TrimSpace(query)
-	
+
 	// Skip if empty, quoted, or contains special characters
 	if trimmed == "" || strings.Contains(trimmed, `"`) || strings.Contains(trimmed, ":") {
 		return false
 	}
-	
+
 	// Check if it's a single word (no spaces)
 	words := strings.Fields(trimmed)
 	if len(words) != 1 {
 		return false
 	}
-	
+
 	word := words[0]
-	
+
 	// Must be at least 3 characters and only contain word characters
 	if len(word) < 3 {
 		return false
 	}
-	
+
 	// Simple check for word characters (letters, numbers, basic punctuation)
 	for _, r := range word {
 		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -1269,13 +1269,13 @@ func isSimpleWordQuery(query string) bool {
 func (e *Engine) normalizeVectorScore(score float64) float64 {
 	// Cosine similarity is already in [-1, 1], convert to [0, 1]
 	normalized := (score + 1.0) / 2.0
-	
+
 	// Apply more conservative scoring for better precision
 	// Only scores above 0.75 similarity get high ranking
 	if normalized < 0.75 {
 		return normalized * 0.5 // Reduce low similarity scores
 	}
-	
+
 	// Apply sigmoid for better distribution of high-quality matches
 	return 1.0 / (1.0 + math.Exp(-15*(normalized-0.8)))
 }
@@ -1286,13 +1286,13 @@ func (e *Engine) normalizeTextScore(score float64) float64 {
 	if score <= 0 {
 		return 0
 	}
-	
+
 	// Apply logarithmic scaling with cutoff
 	normalized := math.Log1p(score) / math.Log1p(10.0)
 	if normalized > 1.0 {
 		normalized = 1.0
 	}
-	
+
 	return normalized
 }
 
@@ -1302,20 +1302,20 @@ func (e *Engine) prepareTextSearchQuery(query string, processedQuery *ProcessedQ
 	if processedQuery != nil && processedQuery.EnhancedQuery != nil && processedQuery.EnhancedQuery.PgTsQuery != "" {
 		// Validate and clean the tsquery
 		tsQuery := processedQuery.EnhancedQuery.PgTsQuery
-		
+
 		e.log.WithFields(logrus.Fields{
 			"original_query": query,
-			"pg_tsquery": tsQuery,
+			"pg_tsquery":     tsQuery,
 		}).Info("DEBUG: Using LLM-provided PgTsQuery")
-		
+
 		// Ensure proper formatting for PostgreSQL
 		tsQuery = strings.TrimSpace(tsQuery)
-		
+
 		// Check if this is a query for finding files with specific words
 		// These queries often get misinterpreted as needing all words
 		lowerQuery := strings.ToLower(query)
-		if strings.Contains(lowerQuery, "find") && strings.Contains(lowerQuery, "files") && 
-		   strings.Contains(lowerQuery, "word") {
+		if strings.Contains(lowerQuery, "find") && strings.Contains(lowerQuery, "files") &&
+			strings.Contains(lowerQuery, "word") {
 			// Extract the actual word mentioned after "word" in the query
 			words := strings.Fields(lowerQuery)
 			for i, word := range words {
@@ -1329,7 +1329,7 @@ func (e *Engine) prepareTextSearchQuery(query string, processedQuery *ProcessedQ
 					}
 				}
 			}
-			
+
 			// Fallback: use the first search term if extraction failed
 			if processedQuery.EnhancedQuery.SearchTerms != nil && len(processedQuery.EnhancedQuery.SearchTerms) > 0 {
 				term := strings.ToLower(strings.TrimSpace(processedQuery.EnhancedQuery.SearchTerms[0]))
@@ -1339,7 +1339,7 @@ func (e *Engine) prepareTextSearchQuery(query string, processedQuery *ProcessedQ
 				}
 			}
 		}
-		
+
 		// If it contains operators, it's ready for to_tsquery
 		if strings.Contains(tsQuery, "&") || strings.Contains(tsQuery, "|") || strings.Contains(tsQuery, "!") {
 			// Special handling: if the query contains common meta words with AND operators,
@@ -1361,44 +1361,44 @@ func (e *Engine) prepareTextSearchQuery(query string, processedQuery *ProcessedQ
 			}
 			return tsQuery
 		}
-		
+
 		// Otherwise, treat as simple terms
 		return strings.Join(strings.Fields(tsQuery), " ")
 	}
-	
+
 	// If we have phrases, construct phrase query
 	if processedQuery != nil && len(processedQuery.Phrases) > 0 {
 		var parts []string
-		
+
 		// Add each phrase with proper PostgreSQL phrase query syntax
 		for _, phrase := range processedQuery.Phrases {
 			// Use PostgreSQL phrase query syntax: <phrase> for exact phrase match
 			escapedPhrase := strings.ReplaceAll(phrase, "'", "''") // Escape single quotes
 			parts = append(parts, fmt.Sprintf("'%s'", escapedPhrase))
 		}
-		
+
 		// Add non-phrase terms if any exist
 		if processedQuery.Cleaned != "" {
 			// Remove quotes from cleaned query and prepare remaining terms
 			remainingQuery := strings.ReplaceAll(processedQuery.Cleaned, "\"", "")
 			remainingQuery = strings.TrimSpace(remainingQuery)
-			
+
 			if remainingQuery != "" {
 				// Remove special characters that might break tsquery
 				remainingQuery = strings.ReplaceAll(remainingQuery, "'", "")
 				remainingQuery = strings.ReplaceAll(remainingQuery, "\\", "")
-				
+
 				// Handle boolean operators
 				remainingQuery = strings.ReplaceAll(remainingQuery, " AND ", " & ")
 				remainingQuery = strings.ReplaceAll(remainingQuery, " OR ", " | ")
 				remainingQuery = strings.ReplaceAll(remainingQuery, " NOT ", " ! ")
-				
+
 				if remainingQuery != "" {
 					parts = append(parts, remainingQuery)
 				}
 			}
 		}
-		
+
 		// Combine all parts with AND
 		if len(parts) > 1 {
 			return strings.Join(parts, " & ")
@@ -1406,34 +1406,34 @@ func (e *Engine) prepareTextSearchQuery(query string, processedQuery *ProcessedQ
 			return parts[0]
 		}
 	}
-	
+
 	// Fall back to original logic for non-phrase queries
 	// Remove special characters that might break tsquery
 	query = strings.ReplaceAll(query, "'", "")
 	query = strings.ReplaceAll(query, "\"", "") // Still remove quotes for non-phrase queries
 	query = strings.ReplaceAll(query, "\\", "")
-	
+
 	// Handle boolean operators - case insensitive
 	// Replace common variations
 	query = regexp.MustCompile(`(?i)\s+OR\s+`).ReplaceAllString(query, " | ")
 	query = regexp.MustCompile(`(?i)\s+AND\s+`).ReplaceAllString(query, " & ")
 	query = regexp.MustCompile(`(?i)\s+NOT\s+`).ReplaceAllString(query, " ! ")
-	
+
 	// Log the formatted query for debugging
 	e.log.WithFields(logrus.Fields{
 		"formatted": query,
 	}).Debug("Formatted text search query")
-	
+
 	return query
 }
 
 // generateHighlights generates text highlights for search results
 func (e *Engine) generateHighlights(content, query string) []string {
 	var highlights []string
-	
+
 	// Split query into terms
 	terms := strings.Fields(strings.ToLower(query))
-	
+
 	// Find sentences containing query terms
 	sentences := strings.Split(content, ".")
 	for _, sentence := range sentences {
@@ -1447,19 +1447,19 @@ func (e *Engine) generateHighlights(content, query string) []string {
 				}
 			}
 		}
-		
+
 		if len(highlights) >= 3 {
 			break
 		}
 	}
-	
+
 	return highlights
 }
 
 // extractHighlights extracts highlights from PostgreSQL headline
 func (e *Engine) extractHighlights(headline string) []string {
 	var highlights []string
-	
+
 	// Extract marked sections
 	parts := strings.Split(headline, "<mark>")
 	for i := 1; i < len(parts); i++ {
@@ -1469,7 +1469,7 @@ func (e *Engine) extractHighlights(headline string) []string {
 			highlights = append(highlights, highlight)
 		}
 	}
-	
+
 	return highlights
 }
 
@@ -1478,19 +1478,19 @@ func (e *Engine) validateRequest(req *Request) error {
 	if req.Query == "" {
 		return fmt.Errorf("query cannot be empty")
 	}
-	
+
 	if req.Limit <= 0 {
 		req.Limit = e.config.DefaultLimit
 	}
-	
+
 	if req.Limit > 100 {
 		req.Limit = 100
 	}
-	
+
 	if req.Offset < 0 {
 		req.Offset = 0
 	}
-	
+
 	return nil
 }
 
@@ -1517,17 +1517,17 @@ func (e *Engine) GetSearchHistory(limit int) []map[string]interface{} {
 func (e *Engine) applyLLMEnhancements(req *Request, enhanced *EnhancedQuery, processed *ProcessedQuery) {
 	// Store the enhanced query in the processed query for use in search functions
 	processed.EnhancedQuery = enhanced
-	
+
 	// Use the enhanced query terms if available
 	if enhanced.Enhanced != "" {
 		req.Query = enhanced.Enhanced
 	}
-	
+
 	// If we have enhanced search terms, update the processed query terms
 	if len(enhanced.SearchTerms) > 0 {
 		processed.Terms = enhanced.SearchTerms
 	}
-	
+
 	// If we have vector terms for better semantic search
 	if len(enhanced.VectorTerms) > 0 {
 		// These will be used by the vector search function
@@ -1571,9 +1571,9 @@ func (e *Engine) applyLLMEnhancements(req *Request, enhanced *EnhancedQuery, pro
 				}
 			}
 			e.log.WithFields(logrus.Fields{
-				"date_from":  req.DateFrom,
-				"date_to":    req.DateTo,
-				"date_field": req.Metadata["date_field"],
+				"date_from":    req.DateFrom,
+				"date_to":      req.DateTo,
+				"date_field":   req.Metadata["date_field"],
 				"filter_field": filter.Field,
 			}).Debug("Applied LLM date filter")
 		case "date":
@@ -1674,17 +1674,17 @@ func (e *Engine) GetLLMModelName() string {
 
 // GetLLMDebugInfo returns the last LLM debug information with SQL queries
 func (e *Engine) GetLLMDebugInfo() *DebugInfo {
-	fmt.Printf("DEBUG GetLLMDebugInfo: llmEnhancer=%v, llmDebugInfo=%v, lastDebugInfo=%v\n", 
-		e.llmEnhancer != nil, 
+	fmt.Printf("DEBUG GetLLMDebugInfo: llmEnhancer=%v, llmDebugInfo=%v, lastDebugInfo=%v\n",
+		e.llmEnhancer != nil,
 		e.llmEnhancer != nil && e.llmEnhancer.GetDebugInfo() != nil,
 		e.lastDebugInfo != nil)
-	
+
 	// Prioritize engine's lastDebugInfo (most recent query, LLM or non-LLM)
 	if e.lastDebugInfo != nil {
 		fmt.Printf("DEBUG: Returning engine's lastDebugInfo with query: %s\n", e.lastDebugInfo.Query)
 		return e.lastDebugInfo
 	}
-	
+
 	// Fall back to LLM enhancer's debug info if no engine debug info
 	if e.llmEnhancer != nil {
 		debugInfo := e.llmEnhancer.GetDebugInfo()
@@ -1697,7 +1697,7 @@ func (e *Engine) GetLLMDebugInfo() *DebugInfo {
 			return &enhanced
 		}
 	}
-	
+
 	fmt.Printf("DEBUG: No debug info available\n")
 	return nil
 }

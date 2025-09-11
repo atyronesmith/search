@@ -33,7 +33,7 @@ func (c *CodeChunker) Chunk(content *extractor.ExtractedContent, config *Config)
 	if len(content.Sections) > 0 {
 		return c.chunkBySections(content.Sections, config)
 	}
-	
+
 	// Fall back to function/class-based chunking
 	return c.chunkByCodeStructure(content.Text, config)
 }
@@ -42,7 +42,7 @@ func (c *CodeChunker) Chunk(content *extractor.ExtractedContent, config *Config)
 func (c *CodeChunker) chunkBySections(sections []extractor.SectionContent, config *Config) ([]Chunk, error) {
 	var chunks []Chunk
 	chunkIndex := 0
-	
+
 	for _, section := range sections {
 		// Handle different section types
 		switch section.Type {
@@ -67,12 +67,12 @@ func (c *CodeChunker) chunkBySections(sections []extractor.SectionContent, confi
 				chunks = append(chunks, subChunks...)
 				chunkIndex += len(subChunks)
 			}
-			
+
 		case "imports", "header":
 			// Group imports and headers with following code
 			// This will be handled in the grouping phase
 			continue
-			
+
 		default:
 			// Regular code section
 			if countTokensApproximate(section.Text) <= config.ChunkSize {
@@ -95,10 +95,10 @@ func (c *CodeChunker) chunkBySections(sections []extractor.SectionContent, confi
 			}
 		}
 	}
-	
+
 	// Group related chunks (imports with functions, etc.)
 	chunks = c.groupRelatedChunks(chunks, config)
-	
+
 	return chunks, nil
 }
 
@@ -107,13 +107,13 @@ func (c *CodeChunker) chunkByCodeStructure(text string, config *Config) ([]Chunk
 	lines := strings.Split(text, "\n")
 	var chunks []Chunk
 	chunkIndex := 0
-	
+
 	// Detect code blocks
 	codeBlocks := c.detectCodeBlocks(lines)
-	
+
 	for _, block := range codeBlocks {
 		blockText := strings.Join(lines[block.StartLine:block.EndLine+1], "\n")
-		
+
 		if countTokensApproximate(blockText) <= config.ChunkSize {
 			// Block fits in one chunk
 			chunk := Chunk{
@@ -137,12 +137,12 @@ func (c *CodeChunker) chunkByCodeStructure(text string, config *Config) ([]Chunk
 			chunkIndex += len(subChunks)
 		}
 	}
-	
+
 	// If no code blocks detected, fall back to line-based chunking
 	if len(chunks) == 0 {
 		chunks = c.chunkByLines(lines, chunkIndex, config)
 	}
-	
+
 	return chunks, nil
 }
 
@@ -158,25 +158,25 @@ type CodeBlock struct {
 // detectCodeBlocks detects logical code blocks in the source
 func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 	var blocks []CodeBlock
-	
+
 	currentBlock := &CodeBlock{
 		Type:      "block",
 		StartLine: 0,
 	}
-	
+
 	inFunction := false
 	inClass := false
 	braceLevel := 0
 	parenLevel := 0
-	
+
 	for i, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
-		
+
 		// Skip empty lines and comments for structure detection
 		if trimmedLine == "" || strings.HasPrefix(trimmedLine, "//") || strings.HasPrefix(trimmedLine, "#") {
 			continue
 		}
-		
+
 		// Detect function definitions
 		if c.isFunctionStart(trimmedLine) && !inFunction && !inClass {
 			// Close previous block
@@ -184,7 +184,7 @@ func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 				currentBlock.EndLine = i - 1
 				blocks = append(blocks, *currentBlock)
 			}
-			
+
 			// Start new function block
 			currentBlock = &CodeBlock{
 				Type:      "function",
@@ -193,7 +193,7 @@ func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 			}
 			inFunction = true
 		}
-		
+
 		// Detect class definitions
 		if c.isClassStart(trimmedLine) && !inClass {
 			// Close previous block
@@ -201,7 +201,7 @@ func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 				currentBlock.EndLine = i - 1
 				blocks = append(blocks, *currentBlock)
 			}
-			
+
 			// Start new class block
 			currentBlock = &CodeBlock{
 				Type:      "class",
@@ -210,17 +210,17 @@ func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 			}
 			inClass = true
 		}
-		
+
 		// Track brace/paren levels to detect block ends
 		braceLevel += strings.Count(trimmedLine, "{") - strings.Count(trimmedLine, "}")
 		parenLevel += strings.Count(trimmedLine, "(") - strings.Count(trimmedLine, ")")
-		
+
 		// Detect end of function/class (simplified heuristic)
 		if inFunction && braceLevel == 0 && parenLevel == 0 && trimmedLine != "" {
 			if c.isFunctionEnd(trimmedLine) || i == len(lines)-1 {
 				currentBlock.EndLine = i
 				blocks = append(blocks, *currentBlock)
-				
+
 				// Start new general block
 				currentBlock = &CodeBlock{
 					Type:      "block",
@@ -229,11 +229,11 @@ func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 				inFunction = false
 			}
 		}
-		
+
 		if inClass && braceLevel == 0 && c.isClassEnd(trimmedLine) {
 			currentBlock.EndLine = i
 			blocks = append(blocks, *currentBlock)
-			
+
 			// Start new general block
 			currentBlock = &CodeBlock{
 				Type:      "block",
@@ -242,13 +242,13 @@ func (c *CodeChunker) detectCodeBlocks(lines []string) []CodeBlock {
 			inClass = false
 		}
 	}
-	
+
 	// Close final block
 	if currentBlock.StartLine < len(lines) {
 		currentBlock.EndLine = len(lines) - 1
 		blocks = append(blocks, *currentBlock)
 	}
-	
+
 	return blocks
 }
 
@@ -258,25 +258,25 @@ func (c *CodeChunker) isFunctionStart(line string) bool {
 		"def ", "function ", "func ", "fn ", "void ", "int ", "bool ", "string ",
 		"public ", "private ", "static ",
 	}
-	
+
 	for _, pattern := range patterns {
 		if strings.Contains(line, pattern) && strings.Contains(line, "(") {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 func (c *CodeChunker) isClassStart(line string) bool {
 	patterns := []string{"class ", "interface ", "struct ", "trait ", "impl "}
-	
+
 	for _, pattern := range patterns {
 		if strings.HasPrefix(line, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -314,14 +314,14 @@ func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex in
 	lines := strings.Split(text, "\n")
 	var chunks []Chunk
 	chunkIndex := startIndex
-	
+
 	// Try to split at logical boundaries (empty lines, comments)
 	currentChunk := []string{}
 	currentSize := 0
-	
+
 	for _, line := range lines {
 		lineSize := countTokensApproximate(line)
-		
+
 		if currentSize+lineSize > config.ChunkSize && len(currentChunk) > 0 {
 			// Finalize current chunk
 			chunk := Chunk{
@@ -336,17 +336,17 @@ func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex in
 			}
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Start new chunk with some overlap
 			overlapLines := c.getOverlapLines(currentChunk, config.ChunkOverlap)
 			currentChunk = overlapLines
 			currentSize = c.calculateLinesSize(overlapLines)
 		}
-		
+
 		currentChunk = append(currentChunk, line)
 		currentSize += lineSize
 	}
-	
+
 	// Add final chunk
 	if len(currentChunk) > 0 {
 		chunk := Chunk{
@@ -361,7 +361,7 @@ func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex in
 		}
 		chunks = append(chunks, chunk)
 	}
-	
+
 	return chunks
 }
 
@@ -369,7 +369,7 @@ func (c *CodeChunker) splitLargeCodeSection(text, language string, startIndex in
 func (c *CodeChunker) splitLargeCodeBlock(block CodeBlock, lines []string, startIndex int, config *Config) []Chunk {
 	blockLines := lines[block.StartLine : block.EndLine+1]
 	text := strings.Join(blockLines, "\n")
-	
+
 	return c.splitLargeCodeSection(text, block.Language, startIndex, config)
 }
 
@@ -377,13 +377,13 @@ func (c *CodeChunker) splitLargeCodeBlock(block CodeBlock, lines []string, start
 func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *Config) []Chunk {
 	var chunks []Chunk
 	chunkIndex := startIndex
-	
+
 	currentChunk := []string{}
 	currentSize := 0
-	
+
 	for _, line := range lines {
 		lineSize := countTokensApproximate(line)
-		
+
 		if currentSize+lineSize > config.ChunkSize && len(currentChunk) > 0 {
 			chunk := Chunk{
 				Content: strings.TrimSpace(strings.Join(currentChunk, "\n")),
@@ -395,16 +395,16 @@ func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *Confi
 			}
 			chunks = append(chunks, chunk)
 			chunkIndex++
-			
+
 			// Start new chunk
 			currentChunk = []string{}
 			currentSize = 0
 		}
-		
+
 		currentChunk = append(currentChunk, line)
 		currentSize += lineSize
 	}
-	
+
 	// Add final chunk
 	if len(currentChunk) > 0 {
 		chunk := Chunk{
@@ -417,7 +417,7 @@ func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *Confi
 		}
 		chunks = append(chunks, chunk)
 	}
-	
+
 	return chunks
 }
 
@@ -425,23 +425,23 @@ func (c *CodeChunker) chunkByLines(lines []string, startIndex int, config *Confi
 func (c *CodeChunker) groupRelatedChunks(chunks []Chunk, config *Config) []Chunk {
 	// Simple grouping: if total size allows, combine small adjacent chunks
 	var grouped []Chunk
-	
+
 	i := 0
 	for i < len(chunks) {
 		current := chunks[i]
-		
+
 		// Look ahead to see if we can combine with next chunks
 		combined := current.Content
 		combinedMetadata := make(map[string]interface{})
 		for k, v := range current.Metadata {
 			combinedMetadata[k] = v
 		}
-		
+
 		j := i + 1
 		for j < len(chunks) {
 			next := chunks[j]
 			testCombined := combined + "\n\n" + next.Content
-			
+
 			if countTokensApproximate(testCombined) <= config.ChunkSize {
 				combined = testCombined
 				combinedMetadata["combined_chunks"] = j - i + 1
@@ -450,7 +450,7 @@ func (c *CodeChunker) groupRelatedChunks(chunks []Chunk, config *Config) []Chunk
 				break
 			}
 		}
-		
+
 		// Create grouped chunk
 		groupedChunk := Chunk{
 			Content:  combined,
@@ -459,10 +459,10 @@ func (c *CodeChunker) groupRelatedChunks(chunks []Chunk, config *Config) []Chunk
 			Metadata: combinedMetadata,
 		}
 		grouped = append(grouped, groupedChunk)
-		
+
 		i = j
 	}
-	
+
 	return grouped
 }
 
@@ -471,7 +471,7 @@ func (c *CodeChunker) getOverlapLines(lines []string, overlapSize int) []string 
 	if len(lines) == 0 {
 		return []string{}
 	}
-	
+
 	// Calculate overlap in lines (approximate)
 	overlapLines := overlapSize / 10 // Rough estimate: 10 tokens per line
 	if overlapLines < 1 {
@@ -480,7 +480,7 @@ func (c *CodeChunker) getOverlapLines(lines []string, overlapSize int) []string 
 	if overlapLines > len(lines) {
 		overlapLines = len(lines)
 	}
-	
+
 	return lines[len(lines)-overlapLines:]
 }
 

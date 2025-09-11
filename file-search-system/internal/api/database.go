@@ -205,14 +205,14 @@ func (s *Server) getFileContent(fileID int64) (map[string]interface{}, error) {
 		}
 
 		chunkData := map[string]interface{}{
-			"id":          chunk.ID,
-			"index":       chunk.ChunkIndex,
-			"content":     chunk.Content,
-			"start_line":  chunk.StartLine,
-			"char_start":  chunk.CharStart,
-			"char_end":    chunk.CharEnd,
-			"chunk_type":  chunk.ChunkType,
-			"metadata":    chunk.Metadata,
+			"id":         chunk.ID,
+			"index":      chunk.ChunkIndex,
+			"content":    chunk.Content,
+			"start_line": chunk.StartLine,
+			"char_start": chunk.CharStart,
+			"char_end":   chunk.CharEnd,
+			"chunk_type": chunk.ChunkType,
+			"metadata":   chunk.Metadata,
 		}
 		chunks = append(chunks, chunkData)
 
@@ -295,12 +295,12 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 		if err == sql.ErrNoRows {
 			// Database is empty (e.g., after reset), return zero stats
 			stats = database.IndexingStats{
-				TotalFiles:      0,
-				IndexedFiles:    0,
-				FailedFiles:     0,
-				TotalChunks:     0,
-				TotalSizeBytes:  0,
-				LastUpdated:     time.Now(),
+				TotalFiles:     0,
+				IndexedFiles:   0,
+				FailedFiles:    0,
+				TotalChunks:    0,
+				TotalSizeBytes: 0,
+				LastUpdated:    time.Now(),
 			}
 		} else {
 			return nil, err
@@ -425,25 +425,25 @@ func (s *Server) getIndexingStats() (map[string]interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"total_files":       stats.TotalFiles,
-		"indexed_files":     stats.IndexedFiles,
-		"failed_files":      actualFailed,     // Explicitly use actualFailed
-		"skipped_files":     actualSkipped,    // Add separate skipped count
-		"pending_files":     pendingFiles,
-		"processing_files":  processingFiles,
-		"total_chunks":      stats.TotalChunks,
-		"total_size_bytes":  stats.TotalSizeBytes,
-		"recently_indexed":  recentlyIndexed,
-		"last_updated":      stats.LastUpdated,
-		"index_completion":  float64(stats.IndexedFiles) / float64(stats.TotalFiles) * 100,
+		"total_files":      stats.TotalFiles,
+		"indexed_files":    stats.IndexedFiles,
+		"failed_files":     actualFailed,  // Explicitly use actualFailed
+		"skipped_files":    actualSkipped, // Add separate skipped count
+		"pending_files":    pendingFiles,
+		"processing_files": processingFiles,
+		"total_chunks":     stats.TotalChunks,
+		"total_size_bytes": stats.TotalSizeBytes,
+		"recently_indexed": recentlyIndexed,
+		"last_updated":     stats.LastUpdated,
+		"index_completion": float64(stats.IndexedFiles) / float64(stats.TotalFiles) * 100,
 		"database_size": map[string]interface{}{
-			"total_db_size":           totalDBSize,
-			"files_table_size":        filesTableSize,
-			"chunks_table_size":       chunksTableSize,
-			"text_search_table_size":  textSearchTableSize,
-			"total_db_size_bytes":     totalDBSizeBytes,
-			"files_table_size_bytes":  filesTableSizeBytes,
-			"chunks_table_size_bytes": chunksTableSizeBytes,
+			"total_db_size":                totalDBSize,
+			"files_table_size":             filesTableSize,
+			"chunks_table_size":            chunksTableSize,
+			"text_search_table_size":       textSearchTableSize,
+			"total_db_size_bytes":          totalDBSizeBytes,
+			"files_table_size_bytes":       filesTableSizeBytes,
+			"chunks_table_size_bytes":      chunksTableSizeBytes,
 			"text_search_table_size_bytes": textSearchTableSizeBytes,
 		},
 		"file_type_breakdown": fileTypeBreakdown, // Add file type statistics
@@ -681,9 +681,9 @@ func (s *Server) getMetrics() (map[string]interface{}, error) {
 	systemMetrics, _ := s.getResourceUsage()
 
 	return map[string]interface{}{
-		"database": dbMetrics,
-		"search":   searchMetrics,
-		"system":   systemMetrics,
+		"database":  dbMetrics,
+		"search":    searchMetrics,
+		"system":    systemMetrics,
 		"timestamp": time.Now(),
 	}, nil
 }

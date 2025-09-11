@@ -35,7 +35,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 // Logging middleware
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//		start := time.Now()
+		//		start := time.Now()
 
 		// Wrap ResponseWriter to capture status code
 		wrapped := &responseWriter{
@@ -67,10 +67,10 @@ func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
 			if err := recover(); err != nil {
 				// Log the panic
 				s.log.WithFields(logrus.Fields{
-					"error":      err,
-					"stack":      string(debug.Stack()),
-					"method":     r.Method,
-					"url":        r.URL.Path,
+					"error":       err,
+					"stack":       string(debug.Stack()),
+					"method":      r.Method,
+					"url":         r.URL.Path,
 					"remote_addr": r.RemoteAddr,
 				}).Error("Panic recovered")
 

@@ -32,12 +32,12 @@ type DoclingConfig struct {
 
 // DoclingElement represents a document element from the docling service
 type DoclingElement struct {
-	ElementType  string                 `json:"element_type"`
-	Content      string                 `json:"content"`
-	PageNumber   int                    `json:"page_number"`
+	ElementType   string                 `json:"element_type"`
+	Content       string                 `json:"content"`
+	PageNumber    int                    `json:"page_number"`
 	StructureData map[string]interface{} `json:"structure_data,omitempty"`
-	BoundingBox  *BoundingBox           `json:"bbox,omitempty"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	BoundingBox   *BoundingBox           `json:"bbox,omitempty"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // BoundingBox represents element positioning
@@ -50,12 +50,12 @@ type BoundingBox struct {
 
 // DoclingResult represents the response from docling service
 type DoclingResult struct {
-	Success         bool                   `json:"success"`
-	Elements        []DoclingElement       `json:"elements"`
-	Metadata        map[string]interface{} `json:"metadata"`
-	ProcessingTime  float64               `json:"processing_time"`
-	ErrorMessage    *string               `json:"error_message,omitempty"`
-	ExtractionMethod string               `json:"extraction_method"`
+	Success          bool                   `json:"success"`
+	Elements         []DoclingElement       `json:"elements"`
+	Metadata         map[string]interface{} `json:"metadata"`
+	ProcessingTime   float64                `json:"processing_time"`
+	ErrorMessage     *string                `json:"error_message,omitempty"`
+	ExtractionMethod string                 `json:"extraction_method"`
 }
 
 // NewDoclingClient creates a new docling client
@@ -179,9 +179,9 @@ func (c *DoclingClient) ExtractFromPath(ctx context.Context, filePath string, me
 
 	// Create request payload
 	payload := map[string]interface{}{
-		"file_path":        filePath,
+		"file_path":         filePath,
 		"extraction_method": method,
-		"options":          options,
+		"options":           options,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -266,14 +266,14 @@ func (c *DoclingClient) convertDoclingResult(result *DoclingResult, filePath str
 
 	// Create metadata
 	metadata := map[string]interface{}{
-		"extractor":        "docling",
+		"extractor":         "docling",
 		"extraction_method": result.ExtractionMethod,
-		"processing_time":  result.ProcessingTime,
-		"element_count":    len(result.Elements),
-		"page_count":       len(pages),
-		"char_count":       fullText.Len(),
-		"file_type":        getFileType(filePath),
-		"extracted_at":     time.Now(),
+		"processing_time":   result.ProcessingTime,
+		"element_count":     len(result.Elements),
+		"page_count":        len(pages),
+		"char_count":        fullText.Len(),
+		"file_type":         getFileType(filePath),
+		"extracted_at":      time.Now(),
 	}
 
 	// Merge service metadata
@@ -306,7 +306,7 @@ func getFileType(filePath string) string {
 // EnhancedPDFExtractor provides enhanced PDF extraction with Docling integration
 type EnhancedPDFExtractor struct {
 	*PDFExtractor
-	doclingClient *DoclingClient
+	doclingClient   *DoclingClient
 	fallbackEnabled bool
 }
 
@@ -375,8 +375,8 @@ func (e *EnhancedPDFExtractor) GetSupportedExtensions() []string {
 
 // DoclingExtractor handles all file types supported by Docling service
 type DoclingExtractor struct {
-	config        *Config
-	doclingClient *DoclingClient
+	config          *Config
+	doclingClient   *DoclingClient
 	fallbackEnabled bool
 }
 
@@ -387,8 +387,8 @@ func NewDoclingExtractor(config *Config, doclingConfig *DoclingConfig) *DoclingE
 	}
 
 	return &DoclingExtractor{
-		config:        config,
-		doclingClient: NewDoclingClient(doclingConfig),
+		config:          config,
+		doclingClient:   NewDoclingClient(doclingConfig),
 		fallbackEnabled: true,
 	}
 }

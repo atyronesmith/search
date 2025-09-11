@@ -8,16 +8,16 @@ import (
 
 // ExtractedContent represents content extracted from a file
 type ExtractedContent struct {
-	Text     string            `json:"text"`
+	Text     string                 `json:"text"`
 	Metadata map[string]interface{} `json:"metadata"`
-	Pages    []PageContent     `json:"pages,omitempty"`
-	Sections []SectionContent  `json:"sections,omitempty"`
+	Pages    []PageContent          `json:"pages,omitempty"`
+	Sections []SectionContent       `json:"sections,omitempty"`
 }
 
 // PageContent represents content from a specific page (for PDFs)
 type PageContent struct {
-	Number  int    `json:"number"`
-	Text    string `json:"text"`
+	Number  int              `json:"number"`
+	Text    string           `json:"text"`
 	Objects []DocumentObject `json:"objects,omitempty"`
 }
 
@@ -40,13 +40,13 @@ type DocumentObject struct {
 type Extractor interface {
 	// CanExtract returns true if this extractor can handle the file
 	CanExtract(filePath string) bool
-	
+
 	// Extract extracts content from the file
 	Extract(ctx context.Context, filePath string) (*ExtractedContent, error)
-	
+
 	// GetName returns the name of the extractor
 	GetName() string
-	
+
 	// GetSupportedExtensions returns supported file extensions
 	GetSupportedExtensions() []string
 }
@@ -75,7 +75,7 @@ func (em *Manager) Extract(ctx context.Context, filePath string) (*ExtractedCont
 			return extractor.Extract(ctx, filePath)
 		}
 	}
-	
+
 	return nil, fmt.Errorf("no extractor available for file: %s", filePath)
 }
 
@@ -97,27 +97,27 @@ func (em *Manager) ListExtractors() []Extractor {
 // GetSupportedExtensions returns all supported file extensions
 func (em *Manager) GetSupportedExtensions() []string {
 	extensionSet := make(map[string]bool)
-	
+
 	for _, extractor := range em.extractors {
 		for _, ext := range extractor.GetSupportedExtensions() {
 			extensionSet[strings.ToLower(ext)] = true
 		}
 	}
-	
+
 	extensions := make([]string, 0, len(extensionSet))
 	for ext := range extensionSet {
 		extensions = append(extensions, ext)
 	}
-	
+
 	return extensions
 }
 
 // Config holds configuration for extractors
 type Config struct {
-	MaxFileSizeMB   int               `json:"max_file_size_mb"`
-	Timeout         int               `json:"timeout_seconds"`
-	TempDir         string            `json:"temp_dir"`
-	ExternalTools   map[string]string `json:"external_tools,omitempty"`
+	MaxFileSizeMB int               `json:"max_file_size_mb"`
+	Timeout       int               `json:"timeout_seconds"`
+	TempDir       string            `json:"temp_dir"`
+	ExternalTools map[string]string `json:"external_tools,omitempty"`
 }
 
 // DefaultConfig returns default extractor configuration

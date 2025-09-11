@@ -37,7 +37,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// Log the incoming search type
 	s.log.WithFields(logrus.Fields{
-		"query": req.Query,
+		"query":                req.Query,
 		"incoming_search_type": req.SearchType,
 	}).Info("DEBUG: API received search request")
 
@@ -186,9 +186,9 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendSuccess(w, map[string]interface{}{
-		"files": files,
-		"total": total,
-		"limit": req.Limit,
+		"files":  files,
+		"total":  total,
+		"limit":  req.Limit,
 		"offset": req.Offset,
 	})
 }
@@ -410,24 +410,24 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Fallback to file-based config (legacy)
 	config := map[string]interface{}{
-		"api_host":           s.config.APIHost,
-		"api_port":           s.config.APIPort,
+		"api_host": s.config.APIHost,
+		"api_port": s.config.APIPort,
 		"search_weights": map[string]float64{
 			"vector":   s.config.SearchVectorWeight,
 			"bm25":     s.config.SearchBM25Weight,
 			"metadata": s.config.SearchMetadataWeight,
 		},
 		"indexing": map[string]interface{}{
-			"batch_size":      s.config.IndexBatchSize,
-			"chunk_size":      s.config.IndexChunkSize,
-			"chunk_overlap":   s.config.IndexChunkOverlap,
-			"max_file_size":   s.config.IndexMaxFileSizeMB,
+			"batch_size":    s.config.IndexBatchSize,
+			"chunk_size":    s.config.IndexChunkSize,
+			"chunk_overlap": s.config.IndexChunkOverlap,
+			"max_file_size": s.config.IndexMaxFileSizeMB,
 		},
-		"watch_paths":        s.config.WatchPaths,
-		"ignore_patterns":    s.config.WatchIgnorePatterns,
-		"cpu_threshold":      s.config.CPUThreshold,
-		"memory_threshold":   s.config.MemoryThreshold,
-		"log_level":          s.config.LogLevel,
+		"watch_paths":      s.config.WatchPaths,
+		"ignore_patterns":  s.config.WatchIgnorePatterns,
+		"cpu_threshold":    s.config.CPUThreshold,
+		"memory_threshold": s.config.MemoryThreshold,
+		"log_level":        s.config.LogLevel,
 	}
 
 	s.sendSuccess(w, config)

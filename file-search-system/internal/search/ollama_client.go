@@ -21,7 +21,7 @@ func NewOllamaClient(baseURL string) *OllamaClient {
 	if baseURL == "" {
 		baseURL = "http://localhost:11434"
 	}
-	
+
 	return &OllamaClient{
 		baseURL: baseURL,
 		client: &http.Client{
@@ -185,11 +185,11 @@ func (c *OllamaClient) PullModel(ctx context.Context, modelName string) error {
 			Status string `json:"status"`
 			Error  string `json:"error,omitempty"`
 		}
-		
+
 		if err := decoder.Decode(&pullResp); err != nil {
 			return fmt.Errorf("failed to decode pull response: %w", err)
 		}
-		
+
 		if pullResp.Error != "" {
 			return fmt.Errorf("model pull error: %s", pullResp.Error)
 		}
