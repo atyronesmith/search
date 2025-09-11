@@ -30,6 +30,69 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 
 # ==============================================================================
+# Shell Completion
+# ==============================================================================
+
+.PHONY: completion-bash
+completion-bash: ## Generate bash completion script
+	@echo '# Bash completion for File Search System Makefile'
+	@echo '# Add this to your ~/.bashrc or ~/.bash_profile:'
+	@echo '# eval "$$(make completion-bash)"'
+	@echo ''
+	@echo '_make_file_search_completion() {'
+	@echo '    local cur prev targets'
+	@echo '    COMPREPLY=()'
+	@echo '    cur="$${COMP_WORDS[COMP_CWORD]}"'
+	@echo '    prev="$${COMP_WORDS[COMP_CWORD-1]}"'
+	@echo '    '
+	@echo '    # Get all targets from Makefile'
+	@echo '    targets=$$(make -qp 2>/dev/null | awk -F":" "/^[a-zA-Z0-9][^$$#\/\t=]*:([^=]|$$)/ {print \$$1}" | sort -u)'
+	@echo '    '
+	@echo '    # Generate completions'
+	@echo '    COMPREPLY=($$(compgen -W "$${targets}" -- $${cur}))'
+	@echo '    return 0'
+	@echo '}'
+	@echo ''
+	@echo 'complete -F _make_file_search_completion make'
+
+.PHONY: completion-zsh
+completion-zsh: ## Generate zsh completion script
+	@echo '#compdef make'
+	@echo ''
+	@echo '_make_file_search() {'
+	@echo '    local -a targets'
+	@echo '    targets=('
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "        \"%s:%s\"\n", $$1, $$2}'
+	@echo '    )'
+	@echo '    _describe "make target" targets'
+	@echo '}'
+	@echo ''
+	@echo '_make_file_search "$$@"'
+
+.PHONY: install-completion
+install-completion: ## Install shell completion for current shell
+	@CURRENT_SHELL=$$(basename $$SHELL); \
+	if [ "$$CURRENT_SHELL" = "zsh" ]; then \
+		echo "$(BLUE)Installing Zsh completion...$(RESET)"; \
+		mkdir -p ~/.zsh/completions; \
+		make completion-zsh > ~/.zsh/completions/_make_file_search; \
+		echo "$(GREEN)Zsh completion installed!$(RESET)"; \
+		echo "$(CYAN)Add this line to your ~/.zshrc if not already present:$(RESET)"; \
+		echo "$(YELLOW)fpath=(~/.zsh/completions $$fpath)$(RESET)"; \
+		echo "$(YELLOW)autoload -U compinit && compinit$(RESET)"; \
+		echo "$(CYAN)Then restart your shell or run: exec zsh$(RESET)"; \
+	elif [ "$$CURRENT_SHELL" = "bash" ]; then \
+		echo "$(BLUE)Installing Bash completion...$(RESET)"; \
+		mkdir -p ~/.bash_completion.d; \
+		make completion-bash > ~/.bash_completion.d/file-search-completion.sh; \
+		echo "$(GREEN)Bash completion installed!$(RESET)"; \
+		echo "$(CYAN)Restart your shell or run: source ~/.bash_completion.d/file-search-completion.sh$(RESET)"; \
+	else \
+		echo "$(RED)Unknown shell: $$CURRENT_SHELL$(RESET)"; \
+		echo "$(CYAN)Please use 'make completion-bash' or 'make completion-zsh' manually$(RESET)"; \
+	fi
+
+# ==============================================================================
 # Quick Start Commands
 # ==============================================================================
 
@@ -221,6 +284,45 @@ db-start: ## Start PostgreSQL database
 	fi
 	@cd $(BACKEND_DIR) && $(COMPOSE_CMD) up -d
 	@echo "$(GREEN)Database started!$(RESET)"
+
+.PHONY: unstructured-start
+unstructured-start: ## Start Unstructured document processing container
+	@echo "$(BLUE)Starting Unstructured container...$(RESET)"
+	@if $(CONTAINER_RUNTIME) ps | grep -q file-search-unstructured; then \
+		echo "$(GREEN)Unstructured container is already running$(RESET)"; \
+	else \
+		if $(CONTAINER_RUNTIME) ps -a | grep -q file-search-unstructured; then \
+			echo "$(YELLOW)Container exists but is stopped. Starting it...$(RESET)"; \
+			$(CONTAINER_RUNTIME) start file-search-unstructured; \
+		else \
+			if ! $(CONTAINER_RUNTIME) images | grep -q "file-search-unstructured"; then \
+				echo "$(YELLOW)Building Unstructured image...$(RESET)"; \
+				cd $(BACKEND_DIR)/unstructured && $(CONTAINER_RUNTIME) build -t file-search-unstructured .; \
+			fi; \
+			echo "$(YELLOW)Creating and starting new Unstructured container...$(RESET)"; \
+			$(CONTAINER_RUNTIME) run -d --name file-search-unstructured -p 8001:8001 file-search-unstructured; \
+		fi; \
+		sleep 3; \
+		if $(CONTAINER_RUNTIME) ps | grep -q file-search-unstructured; then \
+			echo "$(GREEN)Unstructured container started successfully!$(RESET)"; \
+			echo "$(CYAN)Service available at: http://localhost:8001$(RESET)"; \
+		else \
+			echo "$(RED)Failed to start Unstructured container$(RESET)"; \
+			exit 1; \
+		fi; \
+	fi
+
+.PHONY: unstructured-stop
+unstructured-stop: ## Stop Unstructured container
+	@echo "$(BLUE)Stopping Unstructured container...$(RESET)"
+	@$(CONTAINER_RUNTIME) stop file-search-unstructured 2>/dev/null || true
+	@$(CONTAINER_RUNTIME) rm file-search-unstructured 2>/dev/null || true
+	@echo "$(GREEN)Unstructured container stopped$(RESET)"
+
+.PHONY: unstructured-logs
+unstructured-logs: ## Show Unstructured container logs
+	@echo "$(BLUE)Unstructured container logs:$(RESET)"
+	@$(CONTAINER_RUNTIME) logs -f file-search-unstructured
 
 .PHONY: db-stop
 db-stop: ## Stop database
