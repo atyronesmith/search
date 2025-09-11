@@ -28,17 +28,17 @@ type File struct {
 
 // Chunk represents a text chunk with embedding
 type Chunk struct {
-	ID         int64              `json:"id"`
-	FileID     int64              `json:"file_id"`
-	ChunkIndex int                `json:"chunk_index"`
-	Content    string             `json:"content"`
-	Embedding  pgvector.Vector    `json:"-"`
-	StartPage  *int               `json:"start_page,omitempty"`
-	StartLine  *int               `json:"start_line,omitempty"`
-	CharStart  int                `json:"char_start"`
-	CharEnd    int                `json:"char_end"`
-	ChunkType  string             `json:"chunk_type"`
-	Metadata   json.RawMessage    `json:"metadata,omitempty"`
+	ID         int64           `json:"id"`
+	FileID     int64           `json:"file_id"`
+	ChunkIndex int             `json:"chunk_index"`
+	Content    string          `json:"content"`
+	Embedding  pgvector.Vector `json:"-"`
+	StartPage  *int            `json:"start_page,omitempty"`
+	StartLine  *int            `json:"start_line,omitempty"`
+	CharStart  int             `json:"char_start"`
+	CharEnd    int             `json:"char_end"`
+	ChunkType  string          `json:"chunk_type"`
+	Metadata   json.RawMessage `json:"metadata,omitempty"`
 }
 
 // TextSearch represents a full-text search entry
@@ -65,29 +65,29 @@ type FileChange struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	FileID         int64           `json:"file_id"`
-	FilePath       string          `json:"file_path"`
-	Filename       string          `json:"filename"`
-	ChunkID        int64           `json:"chunk_id"`
-	Content        string          `json:"content"`
-	Score          float64         `json:"score"`
-	VectorScore    float64         `json:"vector_score"`
-	TextScore      float64         `json:"text_score"`
-	MetadataScore  float64         `json:"metadata_score"`
-	Highlights     []string        `json:"highlights,omitempty"`
-	Metadata       json.RawMessage `json:"metadata,omitempty"`
+	FileID        int64           `json:"file_id"`
+	FilePath      string          `json:"file_path"`
+	Filename      string          `json:"filename"`
+	ChunkID       int64           `json:"chunk_id"`
+	Content       string          `json:"content"`
+	Score         float64         `json:"score"`
+	VectorScore   float64         `json:"vector_score"`
+	TextScore     float64         `json:"text_score"`
+	MetadataScore float64         `json:"metadata_score"`
+	Highlights    []string        `json:"highlights,omitempty"`
+	Metadata      json.RawMessage `json:"metadata,omitempty"`
 }
 
 // IndexingRule represents a directory indexing rule
 type IndexingRule struct {
-	ID              int      `json:"id"`
-	PathPattern     string   `json:"path_pattern"`
-	Priority        int      `json:"priority"`
-	Enabled         bool     `json:"enabled"`
-	Recursive       bool     `json:"recursive"`
-	FilePatterns    []string `json:"file_patterns"`
-	ExcludePatterns []string `json:"exclude_patterns"`
-	MaxFileSizeMB   int      `json:"max_file_size_mb"`
+	ID              int       `json:"id"`
+	PathPattern     string    `json:"path_pattern"`
+	Priority        int       `json:"priority"`
+	Enabled         bool      `json:"enabled"`
+	Recursive       bool      `json:"recursive"`
+	FilePatterns    []string  `json:"file_patterns"`
+	ExcludePatterns []string  `json:"exclude_patterns"`
+	MaxFileSizeMB   int       `json:"max_file_size_mb"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -143,15 +143,15 @@ type FileStatus string
 // File indexing status constants
 const (
 	// FileStatusPending indicates file is waiting to be indexed
-	FileStatusPending    FileStatus = "pending"
+	FileStatusPending FileStatus = "pending"
 	// FileStatusProcessing indicates file is being processed
 	FileStatusProcessing FileStatus = "processing"
 	// FileStatusCompleted indicates file indexing is complete
-	FileStatusCompleted  FileStatus = "completed"
+	FileStatusCompleted FileStatus = "completed"
 	// FileStatusError indicates file indexing failed
-	FileStatusError      FileStatus = "error"
+	FileStatusError FileStatus = "error"
 	// FileStatusSkipped indicates file was skipped
-	FileStatusSkipped    FileStatus = "skipped"
+	FileStatusSkipped FileStatus = "skipped"
 )
 
 // ChangeType represents the type of file system change
@@ -160,13 +160,13 @@ type ChangeType string
 // File change type constants
 const (
 	// ChangeTypeCreated indicates a new file was created
-	ChangeTypeCreated  ChangeType = "created"
+	ChangeTypeCreated ChangeType = "created"
 	// ChangeTypeModified indicates a file was modified
 	ChangeTypeModified ChangeType = "modified"
 	// ChangeTypeDeleted indicates a file was deleted
-	ChangeTypeDeleted  ChangeType = "deleted"
+	ChangeTypeDeleted ChangeType = "deleted"
 	// ChangeTypeRenamed indicates a file was renamed
-	ChangeTypeRenamed  ChangeType = "renamed"
+	ChangeTypeRenamed ChangeType = "renamed"
 )
 
 // ChunkType represents the type of text chunk
@@ -177,11 +177,11 @@ const (
 	// ChunkTypeSemantic indicates semantic chunking strategy
 	ChunkTypeSemantic ChunkType = "semantic"
 	// ChunkTypeCode indicates code-aware chunking
-	ChunkTypeCode     ChunkType = "code"
+	ChunkTypeCode ChunkType = "code"
 	// ChunkTypeTable indicates table chunking
-	ChunkTypeTable    ChunkType = "table"
+	ChunkTypeTable ChunkType = "table"
 	// ChunkTypeList indicates list chunking
-	ChunkTypeList     ChunkType = "list"
+	ChunkTypeList ChunkType = "list"
 	// ChunkTypeSliding indicates sliding window chunking
-	ChunkTypeSliding  ChunkType = "sliding"
+	ChunkTypeSliding ChunkType = "sliding"
 )

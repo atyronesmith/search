@@ -48,10 +48,10 @@ func (db *DB) Close() error {
 // InitSchema initializes the database schema
 func (db *DB) InitSchema() error {
 	ctx := context.Background()
-	
+
 	// Read and execute schema SQL
 	schema := getSchemaSQL()
-	
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -93,13 +93,13 @@ func (db *DB) Ping(ctx context.Context) error {
 // GetFailedFiles returns a list of file paths that have failed or were skipped during indexing
 func (db *DB) GetFailedFiles(ctx context.Context) ([]string, error) {
 	query := `SELECT path FROM files WHERE indexing_status IN ('failed', 'skipped')`
-	
+
 	rows, err := db.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query failed files: %v", err)
 	}
 	defer rows.Close()
-	
+
 	var failedFiles []string
 	for rows.Next() {
 		var path string
@@ -108,32 +108,32 @@ func (db *DB) GetFailedFiles(ctx context.Context) ([]string, error) {
 		}
 		failedFiles = append(failedFiles, path)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error reading failed files: %v", err)
 	}
-	
+
 	return failedFiles, nil
 }
 
 // ResetFileStatus resets a file's indexing status from 'failed' or 'skipped' to 'pending'
 func (db *DB) ResetFileStatus(ctx context.Context, filePath string) error {
 	query := `UPDATE files SET indexing_status = 'pending', last_indexed = NULL WHERE path = $1 AND indexing_status IN ('failed', 'skipped')`
-	
+
 	result, err := db.Exec(ctx, query, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to reset file status: %v", err)
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %v", err)
 	}
-	
+
 	if rowsAffected == 0 {
 		return fmt.Errorf("no failed file found with path: %s", filePath)
 	}
-	
+
 	return nil
 }
 

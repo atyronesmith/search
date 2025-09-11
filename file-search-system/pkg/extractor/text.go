@@ -107,11 +107,11 @@ func (e *TextExtractor) Extract(ctx context.Context, filePath string) (*Extracte
 
 	// Create metadata
 	metadata := map[string]interface{}{
-		"file_size":    info.Size(),
-		"encoding":     encoding,
-		"line_count":   countLines(content),
-		"char_count":   len(content),
-		"file_type":    e.detectTextType(filePath, content),
+		"file_size":  info.Size(),
+		"encoding":   encoding,
+		"line_count": countLines(content),
+		"char_count": len(content),
+		"file_type":  e.detectTextType(filePath, content),
 	}
 
 	// Parse structured content based on file type

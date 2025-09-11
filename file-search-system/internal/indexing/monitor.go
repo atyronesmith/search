@@ -202,7 +202,7 @@ func (m *Monitor) processEvents(ctx context.Context) {
 // shouldIgnore checks if a path should be ignored
 func (m *Monitor) shouldIgnore(path string) bool {
 	basename := filepath.Base(path)
-	
+
 	for _, pattern := range m.ignorePatterns {
 		// Check basename patterns
 		if matched, _ := filepath.Match(pattern, basename); matched {
@@ -213,17 +213,17 @@ func (m *Monitor) shouldIgnore(path string) bool {
 			return true
 		}
 	}
-	
+
 	// Check for hidden files
 	if strings.HasPrefix(basename, ".") {
 		return true
 	}
-	
+
 	// Check for temporary files
 	if strings.HasSuffix(basename, "~") || strings.HasSuffix(basename, ".tmp") {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -333,17 +333,17 @@ func (m *Monitor) isSupportedFile(path string) bool {
 // storeChange stores a file change in the database
 func (m *Monitor) storeChange(change FileChange) {
 	ctx := context.Background()
-	
+
 	query := `
 		INSERT INTO file_changes (file_path, change_type, old_path, detected_at)
 		VALUES ($1, $2, $3, $4)
 	`
-	
+
 	var oldPath *string
 	if change.OldPath != "" {
 		oldPath = &change.OldPath
 	}
-	
+
 	if _, err := m.db.Exec(ctx, query, change.Path, string(change.ChangeType), oldPath, change.Timestamp); err != nil {
 		m.log.WithError(err).WithField("path", change.Path).Error("Failed to store file change")
 	}

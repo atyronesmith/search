@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// ServiceStats represents statistics about the service.
+type ServiceStats struct {
+	StartTime      time.Time
+	Uptime         time.Duration
+	IndexingActive bool
+	TotalFiles     int64
+	IndexedFiles   int64
+}
+
 func TestServiceStats(t *testing.T) {
 	t.Run("service stats structure", func(t *testing.T) {
 		startTime := time.Now()
@@ -67,7 +76,7 @@ func TestAtomicOperations(t *testing.T) {
 		atomic.StoreInt32(&indexingActive, 1)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&indexingActive))
 
-		// Test setting paused state  
+		// Test setting paused state
 		atomic.StoreInt32(&indexingPaused, 1)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&indexingPaused))
 
