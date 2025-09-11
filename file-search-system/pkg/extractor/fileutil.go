@@ -21,7 +21,12 @@ func IsBinaryFile(filePath string) bool {
 	if err != nil {
 		return true // Assume binary if can't read
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Ignore close error
+			_ = err
+		}
+	}()
 
 	// Read the first 8KB to check for binary content
 	buf := make([]byte, 8192)
@@ -164,7 +169,12 @@ func HasValidEncoding(filePath string) bool {
 	if err != nil {
 		return false
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Ignore close error
+			_ = err
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024) // 1MB max line length

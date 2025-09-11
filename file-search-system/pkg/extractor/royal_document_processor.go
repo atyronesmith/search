@@ -104,13 +104,20 @@ func (r *RoyalDocumentProcessor) ExtractRoyalMetadata(ctx context.Context, fileP
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create script file: %v", err)
 	}
-	defer os.Remove(scriptFile.Name())
+	defer func() {
+		if err := os.Remove(scriptFile.Name()); err != nil {
+			// Ignore cleanup error - temp file will be cleaned by OS eventually
+			_ = err
+		}
+	}()
 
 	script := r.createRoyalPythonScript()
 	if _, err := scriptFile.WriteString(script); err != nil {
 		return nil, nil, fmt.Errorf("failed to write script: %v", err)
 	}
-	scriptFile.Close()
+	if err := scriptFile.Close(); err != nil {
+		return nil, nil, fmt.Errorf("failed to close script file: %v", err)
+	}
 
 	// Execute the script
 	response, err := r.runRoyalPythonScript(ctx, scriptFile.Name(), filePath)

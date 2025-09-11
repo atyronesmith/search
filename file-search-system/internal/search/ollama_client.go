@@ -67,11 +67,16 @@ func (c *OllamaClient) Generate(ctx context.Context, model, prompt string) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("ollama API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -96,12 +101,17 @@ func (c *OllamaClient) Health(ctx context.Context) error {
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("Ollama health check failed: %w", err)
+		return fmt.Errorf("ollama health check failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Ollama not healthy (status %d)", resp.StatusCode)
+		return fmt.Errorf("ollama not healthy (status %d)", resp.StatusCode)
 	}
 
 	return nil
@@ -118,7 +128,12 @@ func (c *OllamaClient) ListModels(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to list models (status %d)", resp.StatusCode)
@@ -171,7 +186,12 @@ func (c *OllamaClient) PullModel(ctx context.Context, modelName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to pull model: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

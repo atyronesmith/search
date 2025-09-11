@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
@@ -56,7 +58,15 @@ func (db *DB) InitSchema() error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			// Rollback error is expected if transaction was committed
+			// Only log if it's not a "no transaction" error
+			if !strings.Contains(err.Error(), "no transaction") {
+				logrus.WithError(err).Error("Failed to rollback transaction")
+			}
+		}
+	}()
 
 	if _, err := tx.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("failed to execute schema: %w", err)
@@ -98,7 +108,11 @@ func (db *DB) GetFailedFiles(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query failed files: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logrus.WithError(err).Error("Failed to close database rows")
+		}
+	}()
 
 	var failedFiles []string
 	for rows.Next() {

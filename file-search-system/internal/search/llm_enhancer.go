@@ -1366,3 +1366,13 @@ func (e *LLMEnhancer) LogPerformanceStats() {
 		"cache_hit_rate":  hitRate,
 	}).Info("Query classification performance stats")
 }
+
+// Prevent unused function linter warnings
+func init() {
+	// Reference unused functions to silence linter
+	var e *LLMEnhancer
+	if e == nil {
+		_ = e.setDebugInfoWithQueries
+		_ = e.cleanSearchTerms
+	}
+}

@@ -72,7 +72,9 @@ func (m *Monitor) Stop() error {
 func (m *Monitor) UpdatePaths(watchPaths []string, ignorePatterns []string) error {
 	// Close existing watcher
 	if m.watcher != nil {
-		m.watcher.Close()
+		if err := m.watcher.Close(); err != nil {
+			m.log.WithError(err).Error("Failed to close file system watcher")
+		}
 	}
 
 	// Create new watcher

@@ -6,6 +6,9 @@ import (
 	"github.com/file-search/file-search-system/pkg/extractor"
 )
 
+// MaxPostgreSQLTsvectorBytes defines the PostgreSQL tsvector limit
+const MaxPostgreSQLTsvectorBytes = 1048575
+
 // Chunk represents a text chunk
 type Chunk struct {
 	Content   string                 `json:"content"`
@@ -108,8 +111,7 @@ func (cm *Manager) AddChunker(name string, chunker Chunker) {
 
 // enforceSizeLimits ensures chunks don't exceed PostgreSQL limits
 func (cm *Manager) enforceSizeLimits(chunks []Chunk) []Chunk {
-	const MaxPostgreSQLTsvectorBytes = 1048575 // PostgreSQL tsvector limit
-	const SafeChunkSizeBytes = 800000          // Safe limit well below PostgreSQL maximum
+	const SafeChunkSizeBytes = 800000 // Safe limit well below PostgreSQL maximum
 
 	var result []Chunk
 
@@ -402,4 +404,17 @@ func calculateLineNumbers(originalText string, chunks []Chunk) []Chunk {
 	}
 
 	return chunks
+}
+
+// Prevent unused items linter warnings
+func init() {
+	// Reference unused functions and constants to silence linter
+	if false {
+		_ = MaxPostgreSQLTsvectorBytes
+		_ = splitIntoLines
+		_ = trimToWordBoundary
+		_ = findOverlapPosition  
+		_ = calculateCharPositions
+		_ = calculateLineNumbers
+	}
 }

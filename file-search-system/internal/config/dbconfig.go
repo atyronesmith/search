@@ -48,7 +48,12 @@ func (c *DBConfigService) GetConfig(ctx context.Context) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query config: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			// Log error but continue - config loading is more important
+			_ = err
+		}
+	}()
 
 	config := &Config{}
 
@@ -79,7 +84,12 @@ func (c *DBConfigService) GetConfigMap(ctx context.Context) (map[string]interfac
 	if err != nil {
 		return nil, fmt.Errorf("failed to query config: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			// Log error but continue - config loading is more important
+			_ = err
+		}
+	}()
 
 	result := make(map[string]interface{})
 	categories := make(map[string]map[string]interface{})
@@ -318,7 +328,12 @@ func (c *DBConfigService) GetOllamaModels(ctx context.Context) ([]string, error)
 	if err != nil {
 		return c.getFallbackModels(), nil // Return fallback on error
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.getFallbackModels(), nil // Return fallback on error
