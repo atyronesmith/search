@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 type Service struct {
 	config        *config.Config
 	db            *database.DB
+	dbHelper      *dbHelper // Database helper for common operations
 	embedder      *embeddings.OllamaClient
 	scanner       *indexing.Scanner
 	monitor       *indexing.Monitor
@@ -42,7 +44,6 @@ type Service struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	mu     sync.RWMutex
 
 	// Component states
 	indexingActive   int32 // atomic
@@ -243,6 +244,7 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 	s := &Service{
 		config:        cfg,
 		db:            db,
+		dbHelper:      newDBHelper(db),
 		embedder:      embedder,
 		scanner:       scanner,
 		monitor:       monitor,
@@ -314,37 +316,54 @@ func (s *Service) Start() error {
 func (s *Service) Stop() error {
 	s.log.Info("Stopping background service")
 
-	// Stop all operations
+	// Cancel context first to signal all goroutines
 	s.cancel()
 
-	// Stop monitoring
+	// Close channels to prevent new work
+	if s.indexingEvents != nil {
+		close(s.indexingEvents)
+	}
+	if s.systemEvents != nil {
+		close(s.systemEvents)
+	}
+
+	// Stop operations with proper error collection
+	var stopErrors []error
+
+	// Stop indexing
 	if err := s.StopIndexing(); err != nil {
 		s.log.WithError(err).Error("Error stopping indexing")
+		stopErrors = append(stopErrors, fmt.Errorf("stop indexing: %w", err))
 	}
 
 	// Stop file monitoring
 	if err := s.StopFileMonitoring(); err != nil {
 		s.log.WithError(err).Error("Error stopping file monitoring")
+		stopErrors = append(stopErrors, fmt.Errorf("stop monitoring: %w", err))
 	}
 
-	// Wait for all goroutines to finish
+	// Wait for all goroutines with timeout
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
 		close(done)
 	}()
 
-	// Wait with timeout
 	select {
 	case <-done:
-		s.log.Info("Background service stopped successfully")
+		s.log.Info("All goroutines stopped successfully")
 	case <-time.After(30 * time.Second):
-		s.log.Warn("Background service stop timeout, forcing shutdown")
+		s.log.Warn("Shutdown timeout reached, some goroutines may still be running")
+		stopErrors = append(stopErrors, fmt.Errorf("shutdown timeout after 30s"))
 	}
 
-	// Emit shutdown event
+	// Final cleanup
 	s.emitSystemEvent("service_stopped", "Background service stopped", "info")
 
+	// Return combined errors if any
+	if len(stopErrors) > 0 {
+		return fmt.Errorf("service stop errors: %v", stopErrors)
+	}
 	return nil
 }
 
@@ -534,47 +553,6 @@ func (s *Service) GetIndexingStatus() map[string]interface{} {
 	}
 }
 
-// categorizeProcessingError categorizes errors for better handling
-func (s *Service) categorizeProcessingError(err error) string {
-	errorStr := err.Error()
-
-	switch {
-	case strings.Contains(errorStr, "empty text provided for embedding"):
-		return "empty_content"
-	case strings.Contains(errorStr, "file contains invalid UTF-8"):
-		return "encoding_error"
-	case strings.Contains(errorStr, "invalid byte sequence for encoding"):
-		return "encoding_error"
-	case strings.Contains(errorStr, "string is too long for tsvector"):
-		return "content_too_large"
-	case strings.Contains(errorStr, "no extractor available"):
-		return "unsupported_format"
-	case strings.Contains(errorStr, "file too large"):
-		return "file_too_large"
-	case strings.Contains(errorStr, "permission denied"):
-		return "permission_error"
-	case strings.Contains(errorStr, "no such file or directory"):
-		return "file_not_found"
-	default:
-		return "processing_error"
-	}
-}
-
-// shouldSkipFile determines if a file should be skipped based on error type
-func (s *Service) shouldSkipFile(err error, category string) bool {
-	// These error types are expected and files should be skipped rather than marked as failed
-	skipCategories := map[string]bool{
-		"empty_content":      true, // Empty files are valid, just skip them
-		"encoding_error":     true, // Binary files with encoding issues
-		"content_too_large":  true, // These should now be handled by chunking, skip if still failing
-		"unsupported_format": true, // Files we can't process
-		"file_too_large":     true, // Files exceeding size limits
-		"permission_error":   true, // Files we can't access
-		"file_not_found":     true, // Files that disappeared during processing
-	}
-
-	return skipCategories[category]
-}
 
 // ScanDirectory scans a specific directory
 func (s *Service) ScanDirectory(path string, recursive bool) error {
@@ -881,7 +859,9 @@ func (s *Service) dispatchNextFile(workChan chan<- *database.File) {
 	default:
 		// All workers are busy, skip this iteration
 		// Reset file status back to pending
-		s.updateFileStatus(ctx, file.ID, "pending", "")
+		if err := s.updateFileStatus(ctx, file.ID, "pending", ""); err != nil {
+			s.log.WithError(err).WithField("file_id", file.ID).Error("Failed to reset file status")
+		}
 	}
 }
 
@@ -893,6 +873,13 @@ func (s *Service) processFile(workerID int, file *database.File) {
 		// Fallback if worker context not set
 		ctx = s.ctx
 	}
+	
+	// Check for context cancellation early
+	if err := ctx.Err(); err != nil {
+		s.log.WithField("worker_id", workerID).Debug("Worker context cancelled, stopping file processing")
+		return
+	}
+	
 	start := time.Now()
 
 	s.log.WithFields(logrus.Fields{
@@ -903,18 +890,24 @@ func (s *Service) processFile(workerID int, file *database.File) {
 
 	// Process the file with improved error handling
 	if err := s.processFileComplete(ctx, file); err != nil {
-		// Categorize errors for better handling
-		errorCategory := s.categorizeProcessingError(err)
+		// Check if it was a context cancellation
+		if errors.Is(err, ErrContextCanceled) || errors.Is(err, context.Canceled) {
+			s.log.WithField("worker_id", workerID).Debug("File processing cancelled")
+			return
+		}
+		
+		// Create a structured error
+		procErr := NewFileProcessingError(file.Path, err)
 
 		s.log.WithError(err).WithFields(logrus.Fields{
 			"worker_id":      workerID,
 			"file_id":        file.ID,
 			"path":           file.Path,
-			"error_category": errorCategory,
+			"error_category": procErr.Category,
 		}).Warn("Failed to process file")
 
 		// For certain error types, mark as skipped instead of error
-		if s.shouldSkipFile(err, errorCategory) {
+		if procErr.ShouldSkip() {
 			s.log.WithFields(logrus.Fields{
 				"worker_id": workerID,
 				"file_id":   file.ID,
@@ -922,13 +915,17 @@ func (s *Service) processFile(workerID int, file *database.File) {
 				"reason":    err.Error(),
 			}).Info("Skipping file due to expected condition")
 
-			s.updateFileStatus(ctx, file.ID, "skipped", err.Error())
+			if err2 := s.updateFileStatus(ctx, file.ID, "skipped", err.Error()); err2 != nil {
+				s.log.WithError(err2).WithField("file_id", file.ID).Error("Failed to mark file as skipped")
+			}
 			s.emitIndexingEvent("file_processed", file.Path, "skipped", err, time.Since(start).Milliseconds())
 			return
 		}
 
 		// Mark as error for unexpected failures
-		s.updateFileStatus(ctx, file.ID, "error", err.Error())
+		if err2 := s.updateFileStatus(ctx, file.ID, "error", err.Error()); err2 != nil {
+			s.log.WithError(err2).WithField("file_id", file.ID).Error("Failed to mark file as error")
+		}
 		s.emitIndexingEvent("file_processed", file.Path, "failed", err, time.Since(start).Milliseconds())
 		return
 	}
@@ -1080,6 +1077,11 @@ func (s *Service) addError(component, message string) {
 
 // getNextPendingFile gets the next file that needs to be processed
 func (s *Service) getNextPendingFile(ctx context.Context) (*database.File, error) {
+	// Check context first
+	if err := ctx.Err(); err != nil {
+		return nil, ErrContextCanceled
+	}
+	
 	query := `
 		SELECT id, path, parent_path, filename, extension, file_type,
 		       size_bytes, created_at, modified_at, last_indexed,
@@ -1110,9 +1112,13 @@ func (s *Service) getNextPendingFile(ctx context.Context) (*database.File, error
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no pending files")
+			return nil, ErrNoFilesToProcess
 		}
-		return nil, err
+		return nil, &DatabaseError{
+			Operation: "getNextPendingFile",
+			Query:     "SELECT pending files",
+			Err:       err,
+		}
 	}
 
 	return &file, nil
@@ -1126,39 +1132,13 @@ func (s *Service) storeRoyalMetadata(ctx context.Context, fileID int64, metadata
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	// Update the royal_metadata column
-	query := `UPDATE files SET royal_metadata = $1 WHERE id = $2`
-	_, err = s.db.Exec(ctx, query, metadataJSON, fileID)
-	if err != nil {
-		return fmt.Errorf("failed to update royal metadata: %w", err)
-	}
-
-	return nil
+	// Use the database helper to update metadata
+	return s.dbHelper.updateFileMetadata(ctx, fileID, "royal_metadata", metadataJSON)
 }
 
 // updateFileStatus updates the status of a file
 func (s *Service) updateFileStatus(ctx context.Context, fileID int64, status, errorMessage string) error {
-	var query string
-	var args []interface{}
-
-	if errorMessage != "" {
-		query = `
-			UPDATE files
-			SET indexing_status = $1, error_message = $2, last_indexed = NOW()
-			WHERE id = $3
-		`
-		args = []interface{}{status, errorMessage, fileID}
-	} else {
-		query = `
-			UPDATE files
-			SET indexing_status = $1, error_message = NULL, last_indexed = NOW()
-			WHERE id = $2
-		`
-		args = []interface{}{status, fileID}
-	}
-
-	_, err := s.db.Exec(ctx, query, args...)
-	return err
+	return s.dbHelper.updateFileStatus(ctx, fileID, status, errorMessage)
 }
 
 // processFileComplete handles the complete processing of a single file
@@ -1356,15 +1336,7 @@ func (s *Service) processFileComplete(ctx context.Context, file *database.File) 
 
 // clearFileChunks removes existing chunks for a file
 func (s *Service) clearFileChunks(ctx context.Context, fileID int64) error {
-	// Delete from text_search first (foreign key constraint)
-	_, err := s.db.Exec(ctx, `DELETE FROM text_search WHERE file_id = $1`, fileID)
-	if err != nil {
-		return err
-	}
-
-	// Delete chunks
-	_, err = s.db.Exec(ctx, `DELETE FROM chunks WHERE file_id = $1`, fileID)
-	return err
+	return s.dbHelper.clearFileData(ctx, fileID)
 }
 
 // processChunk processes a single chunk (embedding + storage)
@@ -1402,6 +1374,7 @@ func (s *Service) processChunk(ctx context.Context, fileID int64, chunk *chunker
 	}
 
 	// Convert to pgvector format (float64 to float32)
+	// Pre-allocate with exact size
 	embedding32 := make([]float32, len(embedding))
 	for i, v := range embedding {
 		embedding32[i] = float32(v)
@@ -1491,7 +1464,9 @@ func (s *Service) StartFileMonitoring() error {
 	}
 
 	// Stop existing monitoring if running
-	s.StopFileMonitoring()
+	if err := s.StopFileMonitoring(); err != nil {
+		s.log.WithError(err).Warn("Failed to stop file monitoring")
+	}
 
 	// Update monitor with database paths
 	if err := s.monitor.UpdatePaths(dbConfig.WatchPaths, dbConfig.WatchIgnorePatterns); err != nil {

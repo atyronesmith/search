@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -183,7 +184,7 @@ func (rl *RateLimiter) WaitForIndexing() {
 	rl.stats.IndexingAllowed++
 	rl.statsLock.Unlock()
 
-	rl.indexingLimiter.Wait(nil)
+	_ = rl.indexingLimiter.Wait(context.Background())
 }
 
 // WaitForEmbedding waits until an embedding operation is allowed
@@ -193,7 +194,7 @@ func (rl *RateLimiter) WaitForEmbedding() {
 	rl.stats.EmbeddingAllowed++
 	rl.statsLock.Unlock()
 
-	rl.embeddingLimiter.Wait(nil)
+	_ = rl.embeddingLimiter.Wait(context.Background())
 }
 
 // WaitForSearch waits until a search operation is allowed
@@ -203,7 +204,7 @@ func (rl *RateLimiter) WaitForSearch() {
 	rl.stats.SearchAllowed++
 	rl.statsLock.Unlock()
 
-	rl.searchLimiter.Wait(nil)
+	_ = rl.searchLimiter.Wait(context.Background())
 }
 
 // UpdateRates updates the rate limits based on current conditions
