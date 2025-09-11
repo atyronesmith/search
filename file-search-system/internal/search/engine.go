@@ -218,16 +218,15 @@ func (e *Engine) Search(ctx context.Context, req *Request) (*Response, error) {
 		e.applyLLMEnhancements(req, enhancedQuery, processedQuery)
 	}
 
-	// Log processed query details at debug level
-	e.log.WithFields(logrus.Fields{
-		"original_query": processedQuery.Original,
-		"cleaned_query":  processedQuery.Cleaned,
-		"phrases":        processedQuery.Phrases,
-		"query_type":     processedQuery.QueryType,
-	}).Debug("Query processing results")
-
 	// Update request with processed information
 	if processedQuery != nil {
+		// Log processed query details at debug level
+		e.log.WithFields(logrus.Fields{
+			"original_query": processedQuery.Original,
+			"cleaned_query":  processedQuery.Cleaned,
+			"phrases":        processedQuery.Phrases,
+			"query_type":     processedQuery.QueryType,
+		}).Debug("Query processing results")
 		// Apply extracted filters to the request
 		if len(processedQuery.FileTypes) > 0 {
 			req.FileTypes = append(req.FileTypes, processedQuery.FileTypes...)
@@ -536,7 +535,11 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 	if err != nil {
 		return nil, fmt.Errorf("vector search query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			e.log.WithError(err).Error("Failed to close vector search rows")
+		}
+	}()
 
 	var results []Result
 	for rows.Next() {
@@ -565,7 +568,10 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 		// Parse metadata
 		result.Metadata = make(map[string]interface{})
 		if len(chunkMetadata) > 0 {
-			json.Unmarshal(chunkMetadata, &result.Metadata)
+			if err := json.Unmarshal(chunkMetadata, &result.Metadata); err != nil {
+				e.log.WithError(err).Error("Failed to unmarshal chunk metadata")
+				result.Metadata = make(map[string]interface{})
+			}
 		}
 
 		// Normalize vector score
@@ -646,7 +652,11 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 	if err != nil {
 		return nil, fmt.Errorf("text search query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			e.log.WithError(err).Error("Failed to close text search rows")
+		}
+	}()
 
 	var results []Result
 	resultCount := 0
@@ -680,7 +690,10 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 		// Parse metadata
 		result.Metadata = make(map[string]interface{})
 		if len(chunkMetadata) > 0 {
-			json.Unmarshal(chunkMetadata, &result.Metadata)
+			if err := json.Unmarshal(chunkMetadata, &result.Metadata); err != nil {
+				e.log.WithError(err).Error("Failed to unmarshal chunk metadata")
+				result.Metadata = make(map[string]interface{})
+			}
 		}
 
 		// Extract highlights from headline
@@ -741,9 +754,14 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 	// RRF formula: score = 1 / (k + rank) where k = 60 (common choice)
 	const rrfK = 60.0
 
+	// Pre-allocate maps with estimated capacity to reduce allocations
+	vectorLen := len(vectorResults)
+	textLen := len(textResults)
+	estimatedSize := vectorLen + textLen
+	
 	// Create rank maps for RRF calculation
-	vectorRanks := make(map[int64]int)
-	textRanks := make(map[int64]int)
+	vectorRanks := make(map[int64]int, vectorLen)
+	textRanks := make(map[int64]int, textLen)
 
 	// Assign ranks to vector results (1-based)
 	for i, vr := range vectorResults {
@@ -756,10 +774,10 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 	}
 
 	// Create a map to combine results by chunk ID
-	resultMap := make(map[int64]*Result)
+	resultMap := make(map[int64]*Result, estimatedSize)
 
 	// Process all unique chunk IDs from both result sets
-	allChunkIDs := make(map[int64]bool)
+	allChunkIDs := make(map[int64]bool, estimatedSize)
 	for _, vr := range vectorResults {
 		allChunkIDs[vr.ChunkID] = true
 	}
@@ -827,13 +845,8 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 		// Add metadata score to RRF score (small weight to preserve RRF dominance)
 		result.Score += metadataScore * e.config.MetadataWeight
 
-		// Store individual scores for debugging and UI display
-		if _, ok := vectorRanks[result.ChunkID]; ok {
-			// Keep original vector score for display
-		}
-		if _, ok := textRanks[result.ChunkID]; ok {
-			// Keep original text score for display
-		}
+		// Individual scores are kept for debugging and UI display
+		// Vector and text scores are already stored in result.VectorScore and result.TextScore
 
 		// Apply minimum score threshold (adjusted for RRF scale)
 		// RRF scores are typically much smaller than weighted scores
@@ -870,7 +883,7 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 	score := 0.5 // Base score
 
 	// File type relevance
-	if req.FileTypes != nil && len(req.FileTypes) > 0 {
+	if len(req.FileTypes) > 0 {
 		for _, ft := range req.FileTypes {
 			if result.FileType == ft {
 				score += 0.2
@@ -880,7 +893,7 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 	}
 
 	// Path relevance
-	if req.Paths != nil && len(req.Paths) > 0 {
+	if len(req.Paths) > 0 {
 		for _, path := range req.Paths {
 			if strings.Contains(result.FilePath, path) {
 				score += 0.15
@@ -890,7 +903,7 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 	}
 
 	// Extension match
-	if req.Extensions != nil && len(req.Extensions) > 0 {
+	if len(req.Extensions) > 0 {
 		for _, ext := range req.Extensions {
 			if strings.HasSuffix(result.Filename, ext) {
 				score += 0.15
@@ -920,9 +933,10 @@ func (e *Engine) buildDateFilter(req *Request) (string, []interface{}) {
 	dateField := "f.modified_at" // default
 	if req.Metadata != nil {
 		if field, ok := req.Metadata["date_field"].(string); ok && field != "" {
-			if field == "created_at" {
+			switch field {
+			case "created_at":
 				dateField = "f.created_at"
-			} else if field == "modified_at" {
+			case "modified_at":
 				dateField = "f.modified_at"
 			}
 		}
@@ -939,7 +953,7 @@ func (e *Engine) buildDateFilter(req *Request) (string, []interface{}) {
 	if req.DateTo != nil {
 		whereClause += fmt.Sprintf(" AND %s <= $%d", dateField, argIndex)
 		args = append(args, *req.DateTo)
-		argIndex++
+		// argIndex not incremented as it's not used again
 	}
 
 	e.log.WithFields(logrus.Fields{
@@ -965,9 +979,10 @@ func (e *Engine) buildDateFilterForTextSearch(req *Request) (string, []interface
 	dateField := "f.modified_at" // default
 	if req.Metadata != nil {
 		if field, ok := req.Metadata["date_field"].(string); ok && field != "" {
-			if field == "created_at" {
+			switch field {
+			case "created_at":
 				dateField = "f.created_at"
-			} else if field == "modified_at" {
+			case "modified_at":
 				dateField = "f.modified_at"
 			}
 		}
@@ -984,7 +999,7 @@ func (e *Engine) buildDateFilterForTextSearch(req *Request) (string, []interface
 	if req.DateTo != nil {
 		whereClause += fmt.Sprintf(" AND %s <= $%d", dateField, argIndex)
 		args = append(args, *req.DateTo)
-		argIndex++
+		// argIndex not incremented as it's not used again
 	}
 
 	e.log.WithFields(logrus.Fields{
@@ -1002,10 +1017,10 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 	// Log what filters are being applied
 	e.log.WithFields(logrus.Fields{
 		"input_count":    len(results),
-		"has_file_types": req.FileTypes != nil && len(req.FileTypes) > 0,
+		"has_file_types": len(req.FileTypes) > 0,
 		"file_types":     req.FileTypes,
-		"has_extensions": req.Extensions != nil && len(req.Extensions) > 0,
-		"has_paths":      req.Paths != nil && len(req.Paths) > 0,
+		"has_extensions": len(req.Extensions) > 0,
+		"has_paths":      len(req.Paths) > 0,
 		"has_date_from":  req.DateFrom != nil,
 		"has_date_to":    req.DateTo != nil,
 		"min_size":       req.MinSize,
@@ -1021,7 +1036,7 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 	var filtered []Result
 	for _, result := range results {
 		// File type filter
-		if req.FileTypes != nil && len(req.FileTypes) > 0 {
+		if len(req.FileTypes) > 0 {
 			found := false
 			for _, ft := range req.FileTypes {
 				// Check exact match first
@@ -1046,7 +1061,7 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 		}
 
 		// Extension filter
-		if req.Extensions != nil && len(req.Extensions) > 0 {
+		if len(req.Extensions) > 0 {
 			found := false
 			for _, ext := range req.Extensions {
 				if strings.HasSuffix(result.Filename, ext) {
@@ -1060,7 +1075,7 @@ func (e *Engine) applyFilters(results []Result, req *Request) []Result {
 		}
 
 		// Path filter
-		if req.Paths != nil && len(req.Paths) > 0 {
+		if len(req.Paths) > 0 {
 			found := false
 			for _, path := range req.Paths {
 				if strings.Contains(result.FilePath, path) {
@@ -1257,7 +1272,7 @@ func isSimpleWordQuery(query string) bool {
 
 	// Simple check for word characters (letters, numbers, basic punctuation)
 	for _, r := range word {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
 			return false
 		}
 	}
@@ -1331,7 +1346,7 @@ func (e *Engine) prepareTextSearchQuery(query string, processedQuery *ProcessedQ
 			}
 
 			// Fallback: use the first search term if extraction failed
-			if processedQuery.EnhancedQuery.SearchTerms != nil && len(processedQuery.EnhancedQuery.SearchTerms) > 0 {
+			if len(processedQuery.EnhancedQuery.SearchTerms) > 0 {
 				term := strings.ToLower(strings.TrimSpace(processedQuery.EnhancedQuery.SearchTerms[0]))
 				if term != "" && term != "files" && term != "word" && term != "find" {
 					e.log.WithField("extracted_term", term).Info("Using first search term as fallback")

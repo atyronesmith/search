@@ -23,6 +23,9 @@ var (
 func main() {
 	flag.Parse()
 
+	// daemon flag is declared but not implemented yet
+	_ = daemon
+
 	// Initialize logger
 	log := logrus.New()
 	log.SetFormatter(&logrus.JSONFormatter{})
@@ -45,7 +48,11 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to database")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.WithError(err).Error("Failed to close database connection")
+		}
+	}()
 
 	// Initialize database schema if requested
 	if *initDB {
@@ -87,8 +94,12 @@ func main() {
 	log.Info("Shutting down...")
 
 	// Stop services
-	apiServer.Stop()
-	svc.Stop()
+	if err := apiServer.Stop(); err != nil {
+		log.WithError(err).Error("Failed to stop API server")
+	}
+	if err := svc.Stop(); err != nil {
+		log.WithError(err).Error("Failed to stop service")
+	}
 
 	log.Info("Shutdown complete")
 }

@@ -324,7 +324,10 @@ func (qp *QueryProcessor) isQuestion(query string) bool {
 // parseSize parses size string to bytes
 func (qp *QueryProcessor) parseSize(value, unit string) int64 {
 	var size int64
-	fmt.Sscanf(value, "%d", &size)
+	if _, err := fmt.Sscanf(value, "%d", &size); err != nil {
+		// Invalid size format, return 0
+		size = 0
+	}
 
 	switch strings.ToUpper(unit) {
 	case "KB":

@@ -93,7 +93,12 @@ func (c *DoclingClient) IsAvailable(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	return resp.StatusCode == http.StatusOK
 }
@@ -109,7 +114,12 @@ func (c *DoclingClient) ExtractFromFile(ctx context.Context, filePath string, me
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Ignore close error
+			_ = err
+		}
+	}()
 
 	// Create multipart form
 	var buf bytes.Buffer
@@ -134,7 +144,9 @@ func (c *DoclingClient) ExtractFromFile(ctx context.Context, filePath string, me
 		}
 	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
 
 	// Create HTTP request
 	url := c.baseURL + "/extract"
@@ -150,7 +162,12 @@ func (c *DoclingClient) ExtractFromFile(ctx context.Context, filePath string, me
 	if err != nil {
 		return nil, fmt.Errorf("docling service request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -203,7 +220,12 @@ func (c *DoclingClient) ExtractFromPath(ctx context.Context, filePath string, me
 	if err != nil {
 		return nil, fmt.Errorf("docling service request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close error for HTTP response body
+			_ = err
+		}
+	}()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -478,7 +500,7 @@ func (e *DoclingExtractor) Extract(ctx context.Context, filePath string) (*Extra
 		}
 	}
 
-	return nil, fmt.Errorf("Docling service unavailable and no fallback for file type: %s", ext)
+	return nil, fmt.Errorf("docling service unavailable and no fallback for file type: %s", ext)
 }
 
 // extractAsText provides basic text extraction for fallback scenarios

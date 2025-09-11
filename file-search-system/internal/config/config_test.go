@@ -30,8 +30,14 @@ func TestEnvironmentVariables(t *testing.T) {
 		testVar := "TEST_VAR"
 		testValue := "test_value"
 
-		os.Setenv(testVar, testValue)
-		defer os.Unsetenv(testVar)
+		if err := os.Setenv(testVar, testValue); err != nil {
+			t.Fatalf("Failed to set environment variable: %v", err)
+		}
+		defer func() {
+			if err := os.Unsetenv(testVar); err != nil {
+				t.Logf("Failed to unset environment variable: %v", err)
+			}
+		}()
 
 		retrieved := os.Getenv(testVar)
 		assert.Equal(t, testValue, retrieved)

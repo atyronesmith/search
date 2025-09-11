@@ -67,7 +67,12 @@ func (e *TextExtractor) Extract(ctx context.Context, filePath string) (*Extracte
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Ignore close error
+			_ = err
+		}
+	}()
 
 	// Check file size
 	info, err := file.Stat()
