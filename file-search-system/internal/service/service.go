@@ -1231,6 +1231,13 @@ func (s *Service) processFileComplete(ctx context.Context, file *database.File) 
 		}
 	}
 
+	// Analyze Unstructured elements if available
+	if extractedContent != nil && extractedContent.Metadata != nil {
+		if elements, ok := extractedContent.Metadata["elements"].([]interface{}); ok && len(elements) > 0 {
+			s.analyzeElements(file.Path, elements)
+		}
+	}
+
 	// Early validation: Skip files with no meaningful content
 	if extractedContent == nil || strings.TrimSpace(extractedContent.Text) == "" {
 		s.log.WithFields(logrus.Fields{
@@ -1678,4 +1685,115 @@ func (s *Service) addFileForMonitoring(path string) error {
 	}
 
 	return nil
+}
+
+// analyzeElements logs statistics about Unstructured elements for analysis
+func (s *Service) analyzeElements(filePath string, elements []interface{}) {
+	elementStats := make(map[string]int)
+	var sizes []int
+	var totalSize int
+	
+	// Detailed element analysis
+	elementDetails := make([]map[string]interface{}, 0)
+	
+	for _, elem := range elements {
+		element, ok := elem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		
+		text, _ := element["text"].(string)
+		elemType, _ := element["type"].(string)
+		
+		textLen := len(text)
+		sizes = append(sizes, textLen)
+		totalSize += textLen
+		elementStats[elemType]++
+		
+		// Collect detailed info for small/large elements
+		if textLen < 50 || textLen > 2000 {
+			detail := map[string]interface{}{
+				"type": elemType,
+				"size": textLen,
+				"preview": text,
+			}
+			if textLen > 100 {
+				detail["preview"] = text[:100] + "..."
+			}
+			elementDetails = append(elementDetails, detail)
+		}
+	}
+	
+	// Calculate statistics
+	if len(sizes) == 0 {
+		return
+	}
+	
+	minSize := sizes[0]
+	maxSize := sizes[0]
+	for _, size := range sizes {
+		if size < minSize {
+			minSize = size
+		}
+		if size > maxSize {
+			maxSize = size
+		}
+	}
+	avgSize := totalSize / len(sizes)
+	
+	// Calculate size distribution
+	sizeDistribution := map[string]int{
+		"tiny (<50)":       0,
+		"small (50-200)":   0,
+		"medium (200-500)": 0,
+		"large (500-1000)": 0,
+		"xlarge (>1000)":   0,
+	}
+	
+	for _, size := range sizes {
+		switch {
+		case size < 50:
+			sizeDistribution["tiny (<50)"]++
+		case size < 200:
+			sizeDistribution["small (50-200)"]++
+		case size < 500:
+			sizeDistribution["medium (200-500)"]++
+		case size < 1000:
+			sizeDistribution["large (500-1000)"]++
+		default:
+			sizeDistribution["xlarge (>1000)"]++
+		}
+	}
+	
+	// Log comprehensive analysis
+	s.log.WithFields(logrus.Fields{
+		"file":              filepath.Base(filePath),
+		"total_elements":    len(elements),
+		"element_types":     elementStats,
+		"size_min":          minSize,
+		"size_max":          maxSize,
+		"size_avg":          avgSize,
+		"size_distribution": sizeDistribution,
+		"small_elements":    sizeDistribution["tiny (<50)"],
+		"extraction_method": "unstructured",
+	}).Info("📊 Unstructured elements analysis")
+	
+	// Log warning if many tiny elements
+	tinyPercent := float64(sizeDistribution["tiny (<50)"]) / float64(len(elements)) * 100
+	if tinyPercent > 30 {
+		s.log.WithFields(logrus.Fields{
+			"file":          filepath.Base(filePath),
+			"tiny_percent":  fmt.Sprintf("%.1f%%", tinyPercent),
+			"tiny_count":    sizeDistribution["tiny (<50)"],
+			"total_elements": len(elements),
+		}).Warn("⚠️ High percentage of tiny elements - grouping recommended")
+	}
+	
+	// Log sample of problematic elements
+	if len(elementDetails) > 0 && len(elementDetails) <= 5 {
+		s.log.WithFields(logrus.Fields{
+			"file":              filepath.Base(filePath),
+			"outlier_elements":  elementDetails,
+		}).Debug("Sample of very small/large elements")
+	}
 }
