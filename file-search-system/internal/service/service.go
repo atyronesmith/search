@@ -16,6 +16,7 @@ import (
 	"github.com/file-search/file-search-system/internal/database"
 	"github.com/file-search/file-search-system/internal/embeddings"
 	"github.com/file-search/file-search-system/internal/indexing"
+	// "github.com/file-search/file-search-system/internal/nlp"
 	"github.com/file-search/file-search-system/internal/search"
 	"github.com/file-search/file-search-system/pkg/chunker"
 	"github.com/file-search/file-search-system/pkg/extractor"
@@ -31,8 +32,9 @@ type Service struct {
 	scanner   *indexing.Scanner
 	monitor   *indexing.Monitor
 	engine    *search.Engine
-	extractor *extractor.ExtractorManager
-	chunker   *chunker.ChunkerManager
+	extractor *extractor.Manager
+	chunker   *chunker.Manager
+	// nlpClient *nlp.Client
 	
 	// Service state
 	ctx       context.Context
@@ -46,8 +48,16 @@ type Service struct {
 	monitoringActive int32  // atomic
 	scanningActive   int32  // atomic
 	
+	// Worker synchronization
+	workersWG        sync.WaitGroup  // Tracks active worker goroutines
+	processingCount  int32           // atomic - number of files currently being processed
+	workChan         chan *database.File // Channel for distributing work to workers
+	workersDone      chan struct{}   // Signal channel to stop workers
+	workerCtx        context.Context    // Context for worker operations
+	workerCancel     context.CancelFunc // Cancel function for worker context
+	
 	// Statistics
-	stats     *ServiceStats
+	stats     *Stats
 	statsLock sync.RWMutex
 	
 	// Resource monitoring
@@ -63,8 +73,8 @@ type Service struct {
 	log       *logrus.Logger
 }
 
-// ServiceStats holds service statistics
-type ServiceStats struct {
+// Stats holds service statistics
+type Stats struct {
 	StartTime        time.Time     `json:"start_time"`
 	Uptime           time.Duration `json:"uptime"`
 	IndexingActive   bool          `json:"indexing_active"`
@@ -145,7 +155,7 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 		CacheTTL:       15 * time.Minute,
 		MinScore:       0.1,
 	}
-	engine := search.NewEngine(db, embedder, searchConfig, log)
+	engine := search.NewEngine(db, embedder, searchConfig, log, cfg.OllamaHost, cfg.LLMModel)
 	
 	// Initialize scanner
 	scannerConfig := &indexing.ScannerConfig{
@@ -187,33 +197,43 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 	})
 	
 	// Initialize extractor manager
-	extractorManager := extractor.NewExtractorManager()
+	extractorManager := extractor.NewManager()
 	
 	// Unstructured.io configuration for comprehensive document processing
 	unstructuredConfig := extractor.UnstructuredConfig{
 		VenvPath: "/Users/asmith/dev/search/file-search-system/unstructured-venv",
-		Timeout:  60 * time.Second,
+		Timeout:  300 * time.Second, // Increased to 5 minutes for large files
 	}
 	
 	// Priority order matters: UnstructuredExtractor handles most document formats
 	extractorManager.AddExtractor(extractor.NewUnstructuredExtractor(unstructuredConfig, log))
 	
 	// Enhanced PDF extractor as fallback for PDFs
-	doclingConfig := &extractor.DoclingConfig{
-		ServiceURL: cfg.DoclingServiceURL,
-		Timeout:    30 * time.Second,
-		Enabled:    false, // Disable Docling in favor of Unstructured
-	}
-	extractorManager.AddExtractor(extractor.NewEnhancedPDFExtractor(extractor.DefaultConfig(), doclingConfig))
+	// DISABLED: Using UnstructuredExtractor for PDFs to get royal metadata
+	// doclingConfig := &extractor.DoclingConfig{
+	// 	ServiceURL: cfg.DoclingServiceURL,
+	// 	Timeout:    30 * time.Second,
+	// 	Enabled:    false, // Disable Docling in favor of Unstructured
+	// }
+	// extractorManager.AddExtractor(extractor.NewEnhancedPDFExtractor(extractor.DefaultConfig(), doclingConfig))
 	
 	// TextExtractor handles remaining text files
-	extractorManager.AddExtractor(extractor.NewTextExtractor(extractor.DefaultConfig()))
+	// TEMPORARILY DISABLED: Let UnstructuredExtractor handle text files for metadata
+	// extractorManager.AddExtractor(extractor.NewTextExtractor(extractor.DefaultConfig()))
 	
-	// CodeExtractor handles programming language files
+	// CodeExtractor handles programming language files  
+	// NOTE: Only for files not supported by UnstructuredExtractor
 	extractorManager.AddExtractor(extractor.NewCodeExtractor(extractor.DefaultConfig()))
 	
 	// Initialize chunker manager  
-	chunkerManager := chunker.NewChunkerManager(chunker.DefaultConfig())
+	chunkerManager := chunker.NewManager(chunker.DefaultConfig())
+	
+	// Initialize NLP client
+	// nlpServiceURL := os.Getenv("NLP_SERVICE_URL")
+	// if nlpServiceURL == "" {
+	// 	nlpServiceURL = "http://localhost:8081"
+	// }
+	// nlpClient := nlp.NewClient(nlpServiceURL)
 	
 	s := &Service{
 		config:    cfg,
@@ -224,11 +244,12 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 		engine:    engine,
 		extractor: extractorManager,
 		chunker:   chunkerManager,
+		// nlpClient: nlpClient,
 		
 		ctx:    ctx,
 		cancel: cancel,
 		
-		stats: &ServiceStats{
+		stats: &Stats{
 			StartTime: time.Now(),
 		},
 		
@@ -264,6 +285,11 @@ func (s *Service) Start() error {
 	// Start indexing loop
 	s.wg.Add(1)
 	go s.runIndexingLoop()
+	
+	// Do NOT auto-enable indexing - let the user control when to start
+	atomic.StoreInt32(&s.indexingActive, 0)
+	atomic.StoreInt32(&s.indexingPaused, 0)
+	s.log.Info("Indexing is idle, waiting for user to start")
 	
 	// Start file monitoring
 	if err := s.StartFileMonitoring(); err != nil {
@@ -327,6 +353,9 @@ func (s *Service) StartIndexing(paths []string, recursive bool) error {
 		"recursive": recursive,
 	}).Info("Starting indexing")
 	
+	// Create a cancellable context for workers
+	s.workerCtx, s.workerCancel = context.WithCancel(s.ctx)
+	
 	// Set indexing as active
 	atomic.StoreInt32(&s.indexingActive, 1)
 	atomic.StoreInt32(&s.indexingPaused, 0)
@@ -352,9 +381,72 @@ func (s *Service) StartIndexing(paths []string, recursive bool) error {
 func (s *Service) StopIndexing() error {
 	s.log.Info("Stopping indexing")
 	
+	// First, stop accepting new work - this prevents dispatcher from adding more files
 	atomic.StoreInt32(&s.indexingActive, 0)
 	atomic.StoreInt32(&s.indexingPaused, 0)
 	
+	// Give the dispatcher a moment to see the flag change (it runs on 1 second ticker)
+	time.Sleep(1100 * time.Millisecond)
+	
+	// Now drain the work channel to prevent workers from picking up queued files
+	if s.workChan != nil {
+		s.log.Info("Draining work queue...")
+		drained := 0
+		drainLoop:
+		for {
+			select {
+			case file := <-s.workChan:
+				if file != nil {
+					// Reset file status back to pending since we're not processing it
+					ctx := context.Background()
+					s.updateFileStatus(ctx, file.ID, "pending", "")
+					drained++
+				}
+			default:
+				break drainLoop
+			}
+		}
+		if drained > 0 {
+			s.log.WithField("count", drained).Info("Drained pending files from work queue")
+		}
+	}
+	
+	// Wait for processing count to reach zero
+	s.log.Info("Waiting for in-flight processing to complete...")
+	startWait := time.Now()
+	for {
+		count := atomic.LoadInt32(&s.processingCount)
+		if count == 0 {
+			break
+		}
+		
+		// Add timeout to prevent infinite wait - reduced since we're cancelling context
+		if time.Since(startWait) > 15*time.Second {
+			s.log.WithField("processing", count).Error("Timeout waiting for processing to complete")
+			break
+		}
+		
+		s.log.WithField("processing", count).Info("Files still processing")
+		time.Sleep(1 * time.Second)
+	}
+	
+	// Now signal workers to stop
+	if s.workersDone != nil {
+		close(s.workersDone)
+		s.workersDone = nil
+	}
+	
+	// Wait for all workers to exit
+	s.log.Info("Waiting for workers to exit...")
+	s.workersWG.Wait()
+	
+	// Final check
+	processingCount := atomic.LoadInt32(&s.processingCount)
+	if processingCount > 0 {
+		s.log.WithField("count", processingCount).Error("Processing count not zero after workers stopped - this is a bug")
+	}
+	
+	s.log.Info("All workers have finished, indexing stopped")
 	s.emitSystemEvent("indexing_stopped", "Indexing process stopped", "info")
 	return nil
 }
@@ -385,6 +477,40 @@ func (s *Service) ResumeIndexing() error {
 	return nil
 }
 
+// GetProcessingCount returns the number of files currently being processed
+func (s *Service) GetProcessingCount() int32 {
+	return atomic.LoadInt32(&s.processingCount)
+}
+
+// ReindexFailed requeues all failed files for reprocessing
+func (s *Service) ReindexFailed() error {
+	s.log.Info("Starting reindex of failed files")
+	
+	// Query for all failed files
+	failedFiles, err := s.db.GetFailedFiles(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get failed files: %v", err)
+	}
+	
+	if len(failedFiles) == 0 {
+		s.log.Info("No failed files found to reindex")
+		return nil
+	}
+	
+	s.log.WithField("count", len(failedFiles)).Info("Found failed files to reindex")
+	
+	// Reset status of failed files to pending
+	for _, filePath := range failedFiles {
+		if err := s.db.ResetFileStatus(context.Background(), filePath); err != nil {
+			s.log.WithError(err).WithField("file", filePath).Warn("Failed to reset file status")
+			continue
+		}
+	}
+	
+	s.emitSystemEvent("reindex_failed_started", fmt.Sprintf("Started reindexing %d failed files", len(failedFiles)), "info")
+	return nil
+}
+
 // GetStartTime returns the service start time
 func (s *Service) GetStartTime() time.Time {
 	return s.startTime
@@ -393,9 +519,10 @@ func (s *Service) GetStartTime() time.Time {
 // GetIndexingStatus returns the current indexing status
 func (s *Service) GetIndexingStatus() map[string]interface{} {
 	return map[string]interface{}{
-		"active":   atomic.LoadInt32(&s.indexingActive) == 1,
-		"paused":   atomic.LoadInt32(&s.indexingPaused) == 1,
-		"scanning": atomic.LoadInt32(&s.scanningActive) == 1,
+		"active":     atomic.LoadInt32(&s.indexingActive) == 1,
+		"paused":     atomic.LoadInt32(&s.indexingPaused) == 1,
+		"scanning":   atomic.LoadInt32(&s.scanningActive) == 1,
+		"processing": atomic.LoadInt32(&s.processingCount),
 	}
 }
 
@@ -462,7 +589,7 @@ func (s *Service) ScanDirectory(path string, recursive bool) error {
 }
 
 // GetStats returns current service statistics
-func (s *Service) GetStats() *ServiceStats {
+func (s *Service) GetStats() *Stats {
 	s.statsLock.RLock()
 	defer s.statsLock.RUnlock()
 	
@@ -495,16 +622,28 @@ func (s *Service) ResetDatabase() error {
 		"text_search",
 		"chunks", 
 		"files",
+		"file_changes",
+		"document_elements",
+		"search_cache",
 		"indexing_stats",
 	}
 	
 	for _, table := range tables {
-		query := fmt.Sprintf("DELETE FROM %s", table)
+		query := fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)
 		if _, err := s.db.Exec(ctx, query); err != nil {
 			s.log.WithError(err).WithField("table", table).Error("Failed to reset table")
 			return fmt.Errorf("failed to reset table %s: %w", table, err)
 		}
 		s.log.WithField("table", table).Info("Reset table")
+	}
+	
+	// Reclaim disk space with VACUUM FULL
+	s.log.Info("Reclaiming disk space after database reset")
+	if _, err := s.db.Exec(ctx, "VACUUM FULL"); err != nil {
+		s.log.WithError(err).Warn("Failed to reclaim disk space, but reset was successful")
+		// Don't fail the reset operation if VACUUM FULL fails
+	} else {
+		s.log.Info("Database disk space reclaimed successfully")
 	}
 	
 	s.emitSystemEvent("database_reset", "Database reset successfully", "info")
@@ -597,34 +736,58 @@ func (s *Service) runStatsUpdater() {
 func (s *Service) runIndexingLoop() {
 	defer s.wg.Done()
 	
-	s.log.WithField("workers", s.config.IndexWorkers).Info("Starting indexing loop with parallel workers")
+	s.log.WithField("workers", s.config.IndexWorkers).Info("Starting indexing loop dispatcher")
 	
 	// Create work channel for distributing file processing tasks
-	workChan := make(chan *database.File, s.config.IndexWorkers*2) // Buffer for smooth processing
+	s.workChan = make(chan *database.File, s.config.IndexWorkers*2) // Buffer for smooth processing
+	s.workersDone = make(chan struct{})
 	
-	// Start worker goroutines
-	for i := 0; i < s.config.IndexWorkers; i++ {
-		s.wg.Add(1)
-		go s.runIndexingWorker(i, workChan)
-	}
+	// Initialize worker context with main context as default
+	s.workerCtx = s.ctx
+	s.workerCancel = func() {} // No-op by default
+	
+	// Don't start workers here - they will be started when indexing is enabled
+	workersStarted := false
 	
 	// Main dispatcher loop
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	defer close(workChan) // Close channel when done
+	defer close(s.workChan) // Close channel when done
 	
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
+			// Start workers if indexing becomes active and they're not started
+			if atomic.LoadInt32(&s.indexingActive) == 1 && !workersStarted {
+				s.log.Info("Starting indexing workers")
+				for i := 0; i < s.config.IndexWorkers; i++ {
+					s.workersWG.Add(1)
+					go s.runIndexingWorker(i, s.workChan)
+				}
+				workersStarted = true
+			}
+			
+			// Stop workers if indexing becomes inactive and they're started
+			if atomic.LoadInt32(&s.indexingActive) == 0 && workersStarted {
+				s.log.Info("Stopping indexing workers via dispatcher")
+				if s.workersDone != nil {
+					close(s.workersDone)
+					s.workersDone = make(chan struct{}) // Create new channel for next time
+				}
+				// Don't wait here - it will block the dispatcher
+				// Workers will exit on their own when they see workersDone closed
+				workersStarted = false
+			}
+			
 			// Only dispatch work if indexing is active and not paused
 			if atomic.LoadInt32(&s.indexingActive) == 1 && 
 			   atomic.LoadInt32(&s.indexingPaused) == 0 {
 				
 				// Apply rate limiting
 				if s.rateLimiter.AllowIndexing() {
-					s.dispatchNextFile(workChan)
+					s.dispatchNextFile(s.workChan)
 				}
 			}
 		}
@@ -633,13 +796,16 @@ func (s *Service) runIndexingLoop() {
 
 // runIndexingWorker processes files from the work channel
 func (s *Service) runIndexingWorker(workerID int, workChan <-chan *database.File) {
-	defer s.wg.Done()
+	defer s.workersWG.Done()
 	
 	s.log.WithField("worker_id", workerID).Info("Starting indexing worker")
 	
 	for {
 		select {
 		case <-s.ctx.Done():
+			return
+		case <-s.workersDone:
+			s.log.WithField("worker_id", workerID).Info("Worker received stop signal")
 			return
 		case file, ok := <-workChan:
 			if !ok {
@@ -648,7 +814,20 @@ func (s *Service) runIndexingWorker(workerID int, workChan <-chan *database.File
 			}
 			
 			if file != nil {
+				// Check if we should still process (indexing might have been stopped)
+				if atomic.LoadInt32(&s.indexingActive) == 0 {
+					// Reset file status back to pending since we're not processing it
+					ctx := context.Background()
+					s.updateFileStatus(ctx, file.ID, "pending", "")
+					s.log.WithField("worker_id", workerID).Debug("Skipping file - indexing stopped")
+					continue
+				}
+				
+				// Increment processing count
+				atomic.AddInt32(&s.processingCount, 1)
 				s.processFile(workerID, file)
+				// Decrement processing count
+				atomic.AddInt32(&s.processingCount, -1)
 			}
 		}
 	}
@@ -657,6 +836,11 @@ func (s *Service) runIndexingWorker(workerID int, workChan <-chan *database.File
 // dispatchNextFile gets the next pending file and sends it to workers
 func (s *Service) dispatchNextFile(workChan chan<- *database.File) {
 	ctx := context.Background()
+	
+	// Check if we should stop dispatching
+	if atomic.LoadInt32(&s.indexingActive) == 0 {
+		return
+	}
 	
 	// Get next pending file
 	file, err := s.getNextPendingFile(ctx)
@@ -689,7 +873,12 @@ func (s *Service) dispatchNextFile(workChan chan<- *database.File) {
 
 // processFile processes a single file (called by workers)
 func (s *Service) processFile(workerID int, file *database.File) {
-	ctx := context.Background()
+	// Use the worker context which can be cancelled
+	ctx := s.workerCtx
+	if ctx == nil {
+		// Fallback if worker context not set
+		ctx = s.ctx
+	}
 	start := time.Now()
 	
 	s.log.WithFields(logrus.Fields{
@@ -884,18 +1073,27 @@ func (s *Service) getNextPendingFile(ctx context.Context) (*database.File, error
 		       content_hash, indexing_status, error_message, metadata
 		FROM files
 		WHERE indexing_status = 'pending'
-		ORDER BY last_indexed ASC, id ASC
+		ORDER BY last_indexed ASC NULLS FIRST, id ASC
 		LIMIT 1
 	`
 	
 	var file database.File
+	var lastIndexed sql.NullTime
 	err := s.db.QueryRow(ctx, query).Scan(
 		&file.ID, &file.Path, &file.ParentPath, &file.Filename,
 		&file.Extension, &file.FileType, &file.SizeBytes,
-		&file.CreatedAt, &file.ModifiedAt, &file.LastIndexed,
+		&file.CreatedAt, &file.ModifiedAt, &lastIndexed,
 		&file.ContentHash, &file.IndexingStatus, &file.ErrorMessage,
 		&file.Metadata,
 	)
+	
+	// Convert NullTime to *time.Time
+	if lastIndexed.Valid {
+		t := lastIndexed.Time
+		file.LastIndexed = &t
+	} else {
+		file.LastIndexed = nil
+	}
 	
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -905,6 +1103,24 @@ func (s *Service) getNextPendingFile(ctx context.Context) (*database.File, error
 	}
 	
 	return &file, nil
+}
+
+// storeRoyalMetadata stores the royal metadata from Unstructured extraction
+func (s *Service) storeRoyalMetadata(ctx context.Context, fileID int64, metadata map[string]interface{}) error {
+	// Convert metadata to JSON
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+	
+	// Update the royal_metadata column
+	query := `UPDATE files SET royal_metadata = $1 WHERE id = $2`
+	_, err = s.db.Exec(ctx, query, metadataJSON, fileID)
+	if err != nil {
+		return fmt.Errorf("failed to update royal metadata: %w", err)
+	}
+	
+	return nil
 }
 
 // updateFileStatus updates the status of a file
@@ -934,10 +1150,36 @@ func (s *Service) updateFileStatus(ctx context.Context, fileID int64, status, er
 
 // processFileComplete handles the complete processing of a single file
 func (s *Service) processFileComplete(ctx context.Context, file *database.File) error {
+	// Check if context is cancelled before starting
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
+	// Get the extractor that will be used for this file
+	var extractorName string
+	if extractor := s.extractor.GetExtractorForFile(file.Path); extractor != nil {
+		extractorName = extractor.GetName()
+		s.log.WithFields(logrus.Fields{
+			"file_id":   file.ID,
+			"path":      file.Path,
+			"extractor": extractorName,
+		}).Debug("Using extractor for file")
+	}
+	
 	// Extract content from file
 	extractedContent, err := s.extractor.Extract(ctx, file.Path)
 	if err != nil {
 		return fmt.Errorf("failed to extract content: %w", err)
+	}
+	
+	// Update the extraction_method in the database
+	if extractorName != "" {
+		updateQuery := `UPDATE files SET extraction_method = $1 WHERE id = $2`
+		if _, err := s.db.Exec(ctx, updateQuery, extractorName, file.ID); err != nil {
+			s.log.WithError(err).WithField("file_id", file.ID).Warn("Failed to update extraction method")
+		}
 	}
 	
 	// Early validation: Skip files with no meaningful content
@@ -978,6 +1220,13 @@ func (s *Service) processFileComplete(ctx context.Context, file *database.File) 
 	// Process each chunk with improved error handling
 	processedCount := 0
 	for _, chunk := range chunks {
+		// Check context before processing each chunk
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		
 		if err := s.processChunk(ctx, file.ID, &chunk); err != nil {
 			// Log the error but continue with other chunks instead of failing the entire file
 			s.log.WithError(err).WithFields(logrus.Fields{
@@ -994,6 +1243,38 @@ func (s *Service) processFileComplete(ctx context.Context, file *database.File) 
 	if processedCount == 0 {
 		return fmt.Errorf("no chunks could be processed successfully")
 	}
+	
+	// Store royal metadata if available
+	s.log.WithFields(logrus.Fields{
+		"file_id":      file.ID,
+		"has_metadata": extractedContent.Metadata != nil,
+		"metadata_len": len(extractedContent.Metadata),
+	}).Info("DEBUG: Checking metadata for storage")
+	
+	if extractedContent.Metadata != nil && len(extractedContent.Metadata) > 0 {
+		s.log.WithFields(logrus.Fields{
+			"file_id":        file.ID,
+			"metadata_count": len(extractedContent.Metadata),
+		}).Info("DEBUG: Storing royal metadata")
+		
+		if err := s.storeRoyalMetadata(ctx, file.ID, extractedContent.Metadata); err != nil {
+			// Log but don't fail - metadata is supplementary
+			s.log.WithError(err).WithField("file_id", file.ID).Warn("Failed to store royal metadata")
+		} else {
+			s.log.WithFields(logrus.Fields{
+				"file_id":        file.ID,
+				"metadata_count": len(extractedContent.Metadata),
+			}).Info("Royal metadata stored successfully")
+		}
+	}
+	
+	// Process file with NLP (entity extraction and document classification)
+	// This is done after chunks are processed to avoid blocking the main pipeline
+	// TODO: Re-enable when NLP package is implemented
+	// if err := s.ProcessFileWithNLP(ctx, file.ID, extractedContent.Text); err != nil {
+	// 	// Log but don't fail - NLP is supplementary
+	// 	s.log.WithError(err).WithField("file_id", file.ID).Warn("NLP processing failed but file indexing succeeded")
+	// }
 	
 	s.log.WithFields(logrus.Fields{
 		"file_id":         file.ID,
@@ -1019,6 +1300,13 @@ func (s *Service) clearFileChunks(ctx context.Context, fileID int64) error {
 
 // processChunk processes a single chunk (embedding + storage)
 func (s *Service) processChunk(ctx context.Context, fileID int64, chunk *chunker.Chunk) error {
+	// Check if context is cancelled before processing
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
 	// Skip chunks with empty or whitespace-only content
 	trimmedContent := strings.TrimSpace(chunk.Content)
 	if trimmedContent == "" {
@@ -1053,6 +1341,13 @@ func (s *Service) processChunk(ctx context.Context, fileID int64, chunk *chunker
 	
 	// Prepare metadata
 	metadata, _ := json.Marshal(chunk.Metadata)
+	
+	// Check context again before database operations
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 	
 	// Insert chunk
 	chunkQuery := `

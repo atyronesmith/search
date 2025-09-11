@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// SearchCache implements a simple in-memory cache for search results
-type SearchCache struct {
+// Cache implements a simple in-memory cache for search results
+type Cache struct {
 	mu      sync.RWMutex
 	items   map[string]*cacheItem
 	ttl     time.Duration
@@ -14,15 +14,15 @@ type SearchCache struct {
 }
 
 type cacheItem struct {
-	response  *SearchResponse
+	response  *Response
 	expiresAt time.Time
 	accessCount int
 	lastAccessed time.Time
 }
 
-// NewSearchCache creates a new search cache
-func NewSearchCache(ttl time.Duration) *SearchCache {
-	cache := &SearchCache{
+// NewCache creates a new search cache
+func NewCache(ttl time.Duration) *Cache {
+	cache := &Cache{
 		items:   make(map[string]*cacheItem),
 		ttl:     ttl,
 		maxSize: 1000, // Maximum number of cached queries
@@ -35,7 +35,7 @@ func NewSearchCache(ttl time.Duration) *SearchCache {
 }
 
 // Get retrieves a cached search response
-func (c *SearchCache) Get(key string) *SearchResponse {
+func (c *Cache) Get(key string) *Response {
 	c.mu.RLock()
 	item, exists := c.items[key]
 	c.mu.RUnlock()
@@ -62,7 +62,7 @@ func (c *SearchCache) Get(key string) *SearchResponse {
 }
 
 // Set stores a search response in the cache
-func (c *SearchCache) Set(key string, response *SearchResponse) {
+func (c *Cache) Set(key string, response *Response) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
@@ -80,28 +80,28 @@ func (c *SearchCache) Set(key string, response *SearchResponse) {
 }
 
 // Delete removes an item from the cache
-func (c *SearchCache) Delete(key string) {
+func (c *Cache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.items, key)
 }
 
 // Clear removes all items from the cache
-func (c *SearchCache) Clear() {
+func (c *Cache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.items = make(map[string]*cacheItem)
 }
 
 // Size returns the number of items in the cache
-func (c *SearchCache) Size() int {
+func (c *Cache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.items)
 }
 
 // evictLRU removes the least recently used item
-func (c *SearchCache) evictLRU() {
+func (c *Cache) evictLRU() {
 	var oldestKey string
 	var oldestTime time.Time
 	
@@ -118,7 +118,7 @@ func (c *SearchCache) evictLRU() {
 }
 
 // cleanupLoop periodically removes expired items
-func (c *SearchCache) cleanupLoop() {
+func (c *Cache) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	
@@ -128,7 +128,7 @@ func (c *SearchCache) cleanupLoop() {
 }
 
 // cleanup removes expired items
-func (c *SearchCache) cleanup() {
+func (c *Cache) cleanup() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
@@ -141,7 +141,7 @@ func (c *SearchCache) cleanup() {
 }
 
 // GetStats returns cache statistics
-func (c *SearchCache) GetStats() CacheStats {
+func (c *Cache) GetStats() CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	

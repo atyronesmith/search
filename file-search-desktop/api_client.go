@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -375,6 +376,26 @@ func (c *APIClient) ResumeIndexing() error {
 	return nil
 }
 
+// ReindexFailed reindexes all failed files via the API
+func (c *APIClient) ReindexFailed() error {
+	resp, err := c.httpClient.Post(
+		c.baseURL+"/api/v1/indexing/reindex-failed",
+		"application/json",
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("API request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
 // GetIndexingStatus gets the indexing status via the API
 func (c *APIClient) GetIndexingStatus() (IndexingStatus, error) {
 	// Get detailed progress from system status
@@ -391,12 +412,15 @@ func (c *APIClient) GetIndexingStatus() (IndexingStatus, error) {
 	defer resp.Body.Close()
 
 	var indexingState string = "unknown"
+	var processingFiles int = 0
 	if resp.StatusCode == http.StatusOK {
 		var response map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&response); err == nil {
 			if getBool(response, "success") {
 				data := getMap(response, "data")
 				indexingState = getIndexingState(data)
+				// Get processing count from the API response
+				processingFiles = int(getFloat(data, "processing"))
 			}
 		}
 	}
@@ -431,13 +455,14 @@ func (c *APIClient) GetIndexingStatus() (IndexingStatus, error) {
 	
 	// Convert the response to our IndexingStatus struct  
 	status := IndexingStatus{
-		State:          indexingState,
-		FilesProcessed: indexedFiles,
-		TotalFiles:     totalFiles,
-		PendingFiles:   pendingFiles,
-		CurrentFile:    "",  // TODO: Get from current processing file
-		Errors:         failedFiles,
-		ElapsedTime:    systemStatus.Uptime,
+		State:           indexingState,
+		FilesProcessed:  indexedFiles,
+		TotalFiles:      totalFiles,
+		PendingFiles:    pendingFiles,
+		ProcessingFiles: processingFiles,
+		CurrentFile:     "",  // TODO: Get from current processing file
+		Errors:          failedFiles,
+		ElapsedTime:     systemStatus.Uptime,
 	}
 
 	return status, nil
@@ -639,6 +664,54 @@ func (c *APIClient) GetFiles(limit, offset int) ([]map[string]interface{}, error
 	return result, nil
 }
 
+// GetFilesSorted gets the list of files via the API with sorting
+func (c *APIClient) GetFilesSorted(limit, offset int, sortBy, sortDir string) ([]map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/api/v1/files?limit=%d&offset=%d&sort_by=%s&sort_dir=%s", 
+		c.baseURL, limit, offset, sortBy, sortDir)
+	
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		// Return empty list if API is not available
+		return []map[string]interface{}{}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return []map[string]interface{}{}, nil
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return []map[string]interface{}{}, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Check if the response is successful
+	if success, ok := response["success"].(bool); !ok || !success {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Extract files from data field
+	data, ok := response["data"].(map[string]interface{})
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+
+	files, ok := data["files"].([]interface{})
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Convert to []map[string]interface{}
+	result := make([]map[string]interface{}, len(files))
+	for i, file := range files {
+		if fileMap, ok := file.(map[string]interface{}); ok {
+			result[i] = fileMap
+		}
+	}
+
+	return result, nil
+}
+
 // ResetDatabase resets the database via the API
 func (c *APIClient) ResetDatabase() error {
 	log.Println("APIClient.ResetDatabase: Starting database reset request")
@@ -748,4 +821,243 @@ func (c *APIClient) CallAPI(method, endpoint, body string) (string, error) {
 	}
 
 	return string(responseBody), nil
+}
+
+func (c *APIClient) GetRootDirectories() (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/api/v1/directories", c.baseURL)
+	
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return map[string]interface{}{}, nil
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return map[string]interface{}{}, nil
+	}
+	
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return map[string]interface{}{}, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	// Check if the response is successful
+	if success, ok := response["success"].(bool); !ok || !success {
+		return map[string]interface{}{}, nil
+	}
+	
+	// Return the data field
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		return data, nil
+	}
+	
+	return map[string]interface{}{}, nil
+}
+
+func (c *APIClient) GetDirectoryContents(path string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/api/v1/directories/contents?path=%s", c.baseURL, url.QueryEscape(path))
+	
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return map[string]interface{}{}, nil
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return map[string]interface{}{}, nil
+	}
+	
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return map[string]interface{}{}, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	// Check if the response is successful
+	if success, ok := response["success"].(bool); !ok || !success {
+		return map[string]interface{}{}, nil
+	}
+	
+	// Return the data field
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		return data, nil
+	}
+	
+	return map[string]interface{}{}, nil
+}
+// GetCurrentLLMModel gets the current LLM model being used
+func (c *APIClient) GetCurrentLLMModel() (string, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/api/v1/ollama/current-llm-model")
+	if err != nil {
+		return "unknown", fmt.Errorf("API request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "unknown", fmt.Errorf("failed to read response: %v", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "unknown", fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Check if the response is successful
+	if success, ok := response["success"].(bool); !ok || !success {
+		return "unknown", nil
+	}
+
+	// Extract the model from the data field
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		if model, ok := data["model"].(string); ok {
+			return model, nil
+		}
+	}
+
+	return "unknown", nil
+}
+
+// GetLLMDebugInfo gets debug information from the last LLM query
+func (c *APIClient) GetLLMDebugInfo() (*DebugInfo, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/api/v1/debug/llm")
+	if err != nil {
+		return nil, fmt.Errorf("API request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Check if the response is successful
+	if success, ok := response["success"].(bool); !ok || !success {
+		return nil, fmt.Errorf("API request was not successful")
+	}
+
+	// Extract the debug info from the data field
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		if debugInfo, ok := data["debug_info"].(map[string]interface{}); ok {
+			// Convert to DebugInfo struct
+			result := &DebugInfo{}
+			
+			if timestamp, ok := debugInfo["timestamp"].(string); ok {
+				result.Timestamp = timestamp
+			}
+			if query, ok := debugInfo["query"].(string); ok {
+				result.Query = query
+			}
+			if model, ok := debugInfo["model"].(string); ok {
+				result.Model = model
+			}
+			if prompt, ok := debugInfo["prompt"].(string); ok {
+				result.Prompt = prompt
+			}
+			if response, ok := debugInfo["response"].(string); ok {
+				result.Response = response
+			}
+			if processTime, ok := debugInfo["process_time_ms"].(float64); ok {
+				result.ProcessTimeMs = int64(processTime)
+			}
+			if errorStr, ok := debugInfo["error"].(string); ok {
+				result.Error = errorStr
+			}
+			if vectorQuery, ok := debugInfo["vector_query"].(string); ok {
+				result.VectorQuery = vectorQuery
+			}
+			if textQuery, ok := debugInfo["text_query"].(string); ok {
+				result.TextQuery = textQuery
+			}
+			
+			return result, nil
+		} else if data["debug_info"] == nil {
+			// debug_info is explicitly null, not an error condition
+			return nil, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no debug info available")
+}
+
+// GetPrompt gets the current LLM prompt template from the backend
+func (c *APIClient) GetPrompt() (string, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/api/v1/prompt")
+	if err != nil {
+		return "", fmt.Errorf("failed to get prompt: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		if prompt, ok := data["prompt"].(string); ok {
+			return prompt, nil
+		}
+	}
+
+	return "", fmt.Errorf("no prompt found in response")
+}
+
+// UpdatePrompt updates the LLM prompt template in the backend
+func (c *APIClient) UpdatePrompt(prompt string) (string, error) {
+	requestBody := map[string]string{
+		"prompt": prompt,
+	}
+	
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", c.baseURL + "/api/v1/prompt", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to update prompt: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		if message, ok := data["message"].(string); ok {
+			return message, nil
+		}
+	}
+
+	return "Prompt updated successfully", nil
 }

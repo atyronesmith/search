@@ -64,6 +64,7 @@ type ModelInfo struct {
 	Details      ModelDetails      `json:"details"`
 }
 
+// ModelDetails represents details about an Ollama model
 type ModelDetails struct {
 	Format            string `json:"format"`
 	Family            string `json:"family"`

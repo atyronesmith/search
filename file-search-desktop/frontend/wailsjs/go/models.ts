@@ -1,5 +1,33 @@
 export namespace main {
 	
+	export class DebugInfo {
+	    timestamp: string;
+	    query: string;
+	    model: string;
+	    prompt: string;
+	    response: string;
+	    process_time_ms: number;
+	    error?: string;
+	    vector_query?: string;
+	    text_query?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DebugInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timestamp = source["timestamp"];
+	        this.query = source["query"];
+	        this.model = source["model"];
+	        this.prompt = source["prompt"];
+	        this.response = source["response"];
+	        this.process_time_ms = source["process_time_ms"];
+	        this.error = source["error"];
+	        this.vector_query = source["vector_query"];
+	        this.text_query = source["text_query"];
+	    }
+	}
 	export class EnhancedQuery {
 	    original: string;
 	    enhanced: string;
@@ -29,6 +57,7 @@ export namespace main {
 	    filesProcessed: number;
 	    totalFiles: number;
 	    pendingFiles: number;
+	    processingFiles: number;
 	    currentFile: string;
 	    errors: number;
 	    elapsedTime: number;
@@ -43,6 +72,7 @@ export namespace main {
 	        this.filesProcessed = source["filesProcessed"];
 	        this.totalFiles = source["totalFiles"];
 	        this.pendingFiles = source["pendingFiles"];
+	        this.processingFiles = source["processingFiles"];
 	        this.currentFile = source["currentFile"];
 	        this.errors = source["errors"];
 	        this.elapsedTime = source["elapsedTime"];

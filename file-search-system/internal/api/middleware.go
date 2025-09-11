@@ -21,13 +21,13 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 		w.Header().Set("Access-Control-Max-Age", "3600")
-		
+
 		// Handle preflight requests
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -36,17 +36,17 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		
+
 		// Wrap ResponseWriter to capture status code
 		wrapped := &responseWriter{
 			ResponseWriter: w,
 			statusCode:     http.StatusOK,
 		}
-		
+
 		next.ServeHTTP(wrapped, r)
-		
+
 		duration := time.Since(start)
-		
+
 		// Log request
 		s.log.WithFields(logrus.Fields{
 			"method":      r.Method,
@@ -73,12 +73,12 @@ func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
 					"url":        r.URL.Path,
 					"remote_addr": r.RemoteAddr,
 				}).Error("Panic recovered")
-				
+
 				// Send error response
 				s.sendError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -91,42 +91,14 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		
+
 		clientIP := s.getClientIP(r)
-		
+
 		if !s.rateLimiter.Allow(clientIP) {
 			s.sendError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
-		
-		next.ServeHTTP(w, r)
-	})
-}
 
-// Authentication middleware (basic implementation)
-func (s *Server) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for health checks and WebSocket upgrades
-		if r.URL.Path == "/api/v1/health" || r.URL.Path == "/api/v1/ws" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		
-		// Check for API key in header
-		apiKey := r.Header.Get("X-API-Key")
-		if apiKey == "" {
-			// Check for Bearer token
-			authHeader := r.Header.Get("Authorization")
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				apiKey = strings.TrimPrefix(authHeader, "Bearer ")
-			}
-		}
-		
-		if !s.validateAPIKey(apiKey) {
-			s.sendError(w, http.StatusUnauthorized, "invalid or missing API key")
-			return
-		}
-		
 		next.ServeHTTP(w, r)
 	})
 }
@@ -140,7 +112,7 @@ func (s *Server) securityMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -181,10 +153,10 @@ func NewRateLimiter(requestsPerMinute int, window time.Duration) *RateLimiter {
 		burst:    requestsPerMinute / 4, // Allow burst of 1/4 of the limit
 		cleanup:  time.NewTicker(10 * time.Minute),
 	}
-	
+
 	// Start cleanup goroutine
 	go rl.cleanupLimiters()
-	
+
 	return rl
 }
 
@@ -193,7 +165,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	rl.mu.RLock()
 	limiter, exists := rl.limiters[ip]
 	rl.mu.RUnlock()
-	
+
 	if !exists {
 		rl.mu.Lock()
 		// Double-check after acquiring write lock
@@ -203,7 +175,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		}
 		rl.mu.Unlock()
 	}
-	
+
 	return limiter.Allow()
 }
 
@@ -236,18 +208,18 @@ func (s *Server) getClientIP(r *http.Request) string {
 			return strings.TrimSpace(ips[0])
 		}
 	}
-	
+
 	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	
+
 	// Fall back to RemoteAddr
 	ip := r.RemoteAddr
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		ip = ip[:colon]
 	}
-	
+
 	return ip
 }
 
@@ -258,7 +230,7 @@ func (s *Server) validateAPIKey(apiKey string) bool {
 		"file-search-dev-key":  true,
 		"file-search-prod-key": true,
 	}
-	
+
 	return validKeys[apiKey]
 }
 
@@ -267,11 +239,11 @@ func (s *Server) requestSizeLimitMiddleware(maxSize int64) func(http.Handler) ht
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ContentLength > maxSize {
-				s.sendError(w, http.StatusRequestEntityTooLarge, 
+				s.sendError(w, http.StatusRequestEntityTooLarge,
 					fmt.Sprintf("request body too large (max %d bytes)", maxSize))
 				return
 			}
-			
+
 			r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 			next.ServeHTTP(w, r)
 		})
@@ -287,10 +259,10 @@ func (s *Server) timeoutMiddleware(timeout time.Duration) func(http.Handler) htt
 				next.ServeHTTP(w, r)
 				return
 			}
-			
+
 			ctx, cancel := context.WithTimeout(r.Context(), timeout)
 			defer cancel()
-			
+
 			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
 		})

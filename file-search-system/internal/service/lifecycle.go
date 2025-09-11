@@ -12,11 +12,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// ServiceState represents the current state of the service
-type ServiceState int
+// State represents the current state of the service
+type State int
 
+// Service state constants
 const (
-	StateUnknown ServiceState = iota
+	// StateUnknown indicates unknown service state
+	StateUnknown State = iota
 	StateStarting
 	StateRunning
 	StatePausing
@@ -28,7 +30,7 @@ const (
 )
 
 // String returns the string representation of the service state
-func (s ServiceState) String() string {
+func (s State) String() string {
 	switch s {
 	case StateStarting:
 		return "starting"
@@ -57,7 +59,7 @@ type LifecycleManager struct {
 	log     *logrus.Logger
 	
 	// State management
-	state      ServiceState
+	state      State
 	stateLock  sync.RWMutex
 	stateTime  time.Time
 	
@@ -77,7 +79,7 @@ type LifecycleManager struct {
 	healthChecker *HealthChecker
 	
 	// State change callbacks
-	stateCallbacks     map[ServiceState][]func(ServiceState, ServiceState)
+	stateCallbacks     map[State][]func(State, State)
 	callbacksLock     sync.RWMutex
 	
 	// Restart management
@@ -103,7 +105,7 @@ func NewLifecycleManager(service *Service, log *logrus.Logger) *LifecycleManager
 		shutdownTimeout: 30 * time.Second,
 		gracefulStop:   make(chan struct{}),
 		forceStop:      make(chan struct{}),
-		stateCallbacks: make(map[ServiceState][]func(ServiceState, ServiceState)),
+		stateCallbacks: make(map[State][]func(State, State)),
 		maxRestarts:    3,
 		restartCooldown: 5 * time.Minute,
 		autoRestart:    true,
@@ -258,7 +260,7 @@ func (lm *LifecycleManager) Restart() error {
 }
 
 // GetState returns the current service state
-func (lm *LifecycleManager) GetState() ServiceState {
+func (lm *LifecycleManager) GetState() State {
 	return lm.getState()
 }
 
@@ -285,7 +287,7 @@ func (lm *LifecycleManager) SetAutoRestart(enabled bool) {
 }
 
 // AddStateCallback adds a callback function that will be called on state changes
-func (lm *LifecycleManager) AddStateCallback(state ServiceState, callback func(ServiceState, ServiceState)) {
+func (lm *LifecycleManager) AddStateCallback(state State, callback func(State, State)) {
 	lm.callbacksLock.Lock()
 	defer lm.callbacksLock.Unlock()
 	
@@ -330,7 +332,7 @@ func (lm *LifecycleManager) handleSignals() {
 }
 
 // setState updates the service state and calls callbacks
-func (lm *LifecycleManager) setState(newState ServiceState) {
+func (lm *LifecycleManager) setState(newState State) {
 	lm.stateLock.Lock()
 	oldState := lm.state
 	lm.state = newState
@@ -358,21 +360,21 @@ func (lm *LifecycleManager) setState(newState ServiceState) {
 }
 
 // getState returns the current state (thread-safe)
-func (lm *LifecycleManager) getState() ServiceState {
+func (lm *LifecycleManager) getState() State {
 	lm.stateLock.RLock()
 	defer lm.stateLock.RUnlock()
 	return lm.state
 }
 
 // callStateCallbacks calls all registered callbacks for state changes
-func (lm *LifecycleManager) callStateCallbacks(oldState, newState ServiceState) {
+func (lm *LifecycleManager) callStateCallbacks(oldState, newState State) {
 	lm.callbacksLock.RLock()
 	defer lm.callbacksLock.RUnlock()
 	
 	// Call callbacks for the new state
 	if callbacks, exists := lm.stateCallbacks[newState]; exists {
 		for _, callback := range callbacks {
-			go func(cb func(ServiceState, ServiceState)) {
+			go func(cb func(State, State)) {
 				defer func() {
 					if r := recover(); r != nil {
 						lm.log.WithField("panic", r).Error("State callback panicked")

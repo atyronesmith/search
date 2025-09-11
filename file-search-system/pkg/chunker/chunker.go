@@ -20,8 +20,8 @@ type Chunk struct {
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// ChunkerConfig holds configuration for chunking
-type ChunkerConfig struct {
+// Config holds configuration for chunking
+type Config struct {
 	ChunkSize    int     `json:"chunk_size"`     // Target chunk size in tokens/characters
 	ChunkOverlap int     `json:"chunk_overlap"`  // Overlap between chunks
 	MaxChunkSize int     `json:"max_chunk_size"` // Maximum chunk size
@@ -30,8 +30,8 @@ type ChunkerConfig struct {
 }
 
 // DefaultConfig returns default chunker configuration
-func DefaultConfig() *ChunkerConfig {
-	return &ChunkerConfig{
+func DefaultConfig() *Config {
+	return &Config{
 		ChunkSize:        512,
 		ChunkOverlap:     64,
 		MaxChunkSize:     800000, // ~800KB - well below PostgreSQL's 1MB tsvector limit
@@ -42,19 +42,19 @@ func DefaultConfig() *ChunkerConfig {
 
 // Chunker interface for different chunking strategies
 type Chunker interface {
-	Chunk(content *extractor.ExtractedContent, config *ChunkerConfig) ([]Chunk, error)
+	Chunk(content *extractor.ExtractedContent, config *Config) ([]Chunk, error)
 	GetName() string
 	SupportsFileType(fileType string) bool
 }
 
-// ChunkerManager manages different chunking strategies
-type ChunkerManager struct {
+// Manager manages different chunking strategies
+type Manager struct {
 	chunkers map[string]Chunker
-	config   *ChunkerConfig
+	config   *Config
 }
 
-// NewChunkerManager creates a new chunker manager
-func NewChunkerManager(config *ChunkerConfig) *ChunkerManager {
+// NewManager creates a new chunker manager
+func NewManager(config *Config) *Manager {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -66,14 +66,14 @@ func NewChunkerManager(config *ChunkerConfig) *ChunkerManager {
 	chunkers["sliding"] = NewSlidingWindowChunker()
 	chunkers["code"] = NewCodeChunker()
 	
-	return &ChunkerManager{
+	return &Manager{
 		chunkers: chunkers,
 		config:   config,
 	}
 }
 
 // ChunkContent chunks content using the appropriate strategy
-func (cm *ChunkerManager) ChunkContent(content *extractor.ExtractedContent, fileType string) ([]Chunk, error) {
+func (cm *Manager) ChunkContent(content *extractor.ExtractedContent, fileType string) ([]Chunk, error) {
 	chunker := cm.selectChunker(fileType, content)
 	chunks, err := chunker.Chunk(content, cm.config)
 	if err != nil {
@@ -85,7 +85,7 @@ func (cm *ChunkerManager) ChunkContent(content *extractor.ExtractedContent, file
 }
 
 // selectChunker selects the appropriate chunker based on content type
-func (cm *ChunkerManager) selectChunker(fileType string, content *extractor.ExtractedContent) Chunker {
+func (cm *Manager) selectChunker(fileType string, content *extractor.ExtractedContent) Chunker {
 	// Priority order for chunker selection
 	chunkerOrder := []string{"code", "semantic", "sliding"}
 	
@@ -102,12 +102,12 @@ func (cm *ChunkerManager) selectChunker(fileType string, content *extractor.Extr
 }
 
 // AddChunker adds a custom chunker
-func (cm *ChunkerManager) AddChunker(name string, chunker Chunker) {
+func (cm *Manager) AddChunker(name string, chunker Chunker) {
 	cm.chunkers[name] = chunker
 }
 
 // enforceSizeLimits ensures chunks don't exceed PostgreSQL limits
-func (cm *ChunkerManager) enforceSizeLimits(chunks []Chunk) []Chunk {
+func (cm *Manager) enforceSizeLimits(chunks []Chunk) []Chunk {
 	const MaxPostgreSQLTsvectorBytes = 1048575 // PostgreSQL tsvector limit
 	const SafeChunkSizeBytes = 800000          // Safe limit well below PostgreSQL maximum
 	
@@ -134,7 +134,7 @@ func (cm *ChunkerManager) enforceSizeLimits(chunks []Chunk) []Chunk {
 }
 
 // splitOversizedChunk splits a chunk that's too large into smaller chunks
-func (cm *ChunkerManager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
+func (cm *Manager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk {
 	content := chunk.Content
 	var subChunks []Chunk
 	
@@ -195,7 +195,7 @@ func (cm *ChunkerManager) splitOversizedChunk(chunk Chunk, maxSize int) []Chunk 
 }
 
 // splitBySentences splits content by sentences when paragraphs are still too large
-func (cm *ChunkerManager) splitBySentences(chunk Chunk, maxSize int) []Chunk {
+func (cm *Manager) splitBySentences(chunk Chunk, maxSize int) []Chunk {
 	content := chunk.Content
 	var subChunks []Chunk
 	

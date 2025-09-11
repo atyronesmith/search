@@ -115,12 +115,18 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/files/{id}", s.handleGetFile).Methods("GET", "OPTIONS")
 	api.HandleFunc("/files/{id}/content", s.handleGetFileContent).Methods("GET", "OPTIONS")
 	api.HandleFunc("/files/{id}/reindex", s.handleReindexFile).Methods("POST", "OPTIONS")
+	
+	// Directory browsing endpoints
+	// TODO: Re-enable when directory handlers are implemented
+	// api.HandleFunc("/directories", s.handleGetRootDirectories).Methods("GET", "OPTIONS")
+	// api.HandleFunc("/directories/contents", s.handleGetDirectoryContents).Methods("GET", "OPTIONS")
 
 	// Indexing control endpoints
 	api.HandleFunc("/indexing/start", s.handleStartIndexing).Methods("POST", "OPTIONS")
 	api.HandleFunc("/indexing/stop", s.handleStopIndexing).Methods("POST", "OPTIONS")
 	api.HandleFunc("/indexing/pause", s.handlePauseIndexing).Methods("POST", "OPTIONS")
 	api.HandleFunc("/indexing/resume", s.handleResumeIndexing).Methods("POST", "OPTIONS")
+	api.HandleFunc("/indexing/reindex-failed", s.handleReindexFailed).Methods("POST", "OPTIONS")
 	api.HandleFunc("/indexing/status", s.handleIndexingStatus).Methods("GET", "OPTIONS")
 
 	// File monitoring control endpoints
@@ -134,6 +140,7 @@ func (s *Server) setupRoutes() {
 	
 	// Cache management endpoints
 	api.HandleFunc("/cache/clear", s.handleClearCache).Methods("POST", "OPTIONS")
+	api.HandleFunc("/cache/stats", s.handleQueryPerformanceStats).Methods("GET", "OPTIONS")
 
 	// System endpoints
 	api.HandleFunc("/status", s.handleSystemStatus).Methods("GET", "OPTIONS")
@@ -144,6 +151,14 @@ func (s *Server) setupRoutes() {
 	
 	// Ollama endpoints
 	api.HandleFunc("/ollama/models", s.handleGetOllamaModels).Methods("GET", "OPTIONS")
+	api.HandleFunc("/ollama/current-llm-model", s.handleGetCurrentLLMModel).Methods("GET", "OPTIONS")
+	
+	// Debug endpoints
+	api.HandleFunc("/debug/llm", s.handleGetLLMDebugInfo).Methods("GET", "OPTIONS")
+	
+	// Prompt management endpoints
+	api.HandleFunc("/prompt", s.handleGetPrompt).Methods("GET", "OPTIONS")
+	api.HandleFunc("/prompt", s.handleUpdatePrompt).Methods("PUT", "OPTIONS")
 
 	// WebSocket endpoint
 	api.HandleFunc("/ws", s.handleWebSocket)
@@ -156,18 +171,21 @@ func (s *Server) setupRoutes() {
 
 // Response types
 
+// ErrorResponse represents an API error response
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
 	Code    int    `json:"code"`
 }
 
+// SuccessResponse represents a successful API response
 type SuccessResponse struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
 }
 
+// SearchRequest represents a search API request
 type SearchRequest struct {
 	Query      string                 `json:"query"`
 	Limit      int                    `json:"limit,omitempty"`
@@ -181,36 +199,67 @@ type SearchRequest struct {
 	Filters    map[string]interface{} `json:"filters,omitempty"`
 }
 
+// FileListRequest represents a request to list files
 type FileListRequest struct {
 	Path      string   `json:"path,omitempty"`
 	FileTypes []string `json:"file_types,omitempty"`
 	Status    string   `json:"status,omitempty"`
 	Limit     int      `json:"limit,omitempty"`
 	Offset    int      `json:"offset,omitempty"`
+	SortBy    string   `json:"sort_by,omitempty"`    // Column to sort by
+	SortDir   string   `json:"sort_dir,omitempty"`   // Sort direction: asc or desc
 }
 
+// IndexingControlRequest represents a request to control indexing
 type IndexingControlRequest struct {
 	Paths     []string `json:"paths,omitempty"`
 	Recursive bool     `json:"recursive,omitempty"`
 	Force     bool     `json:"force,omitempty"`
 }
 
-type SystemStatus struct {
-	Version          string                 `json:"version"`
-	Uptime           time.Duration          `json:"uptime"`
-	IndexingActive   bool                   `json:"indexing_active"`
-	IndexingPaused   bool                   `json:"indexing_paused"`
-	TotalFiles       int64                  `json:"total_files"`
-	IndexedFiles     int64                  `json:"indexed_files"`
-	PendingFiles     int64                  `json:"pending_files"`
-	FailedFiles      int64                  `json:"failed_files"`
-	DatabaseSize     int64                  `json:"database_size"`
-	DatabaseSizeInfo map[string]interface{} `json:"database_size_info"`
-	CacheSize        int                    `json:"cache_size"`
-	ActiveSearches   int                    `json:"active_searches"`
-	ResourceUsage    ResourceUsage          `json:"resource_usage"`
+// DirectoryContentsRequest represents a request to get directory contents
+type DirectoryContentsRequest struct {
+	Path string `json:"path"`
 }
 
+// DirectoryInfo represents information about a directory
+type DirectoryInfo struct {
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	IsDirectory  bool   `json:"is_directory"`
+	FileCount    int    `json:"file_count,omitempty"`
+	TotalSize    int64  `json:"total_size,omitempty"`
+}
+
+// DirectoryContentsResponse represents the response for directory contents
+type DirectoryContentsResponse struct {
+	Path          string         `json:"path"`
+	Directories   []DirectoryInfo `json:"directories"`
+	Files         []interface{}   `json:"files"` // Will contain file objects
+	TotalFiles    int             `json:"total_files"`
+	TotalDirs     int             `json:"total_dirs"`
+}
+
+// SystemStatus represents the current system status
+type SystemStatus struct {
+	Version            string                   `json:"version"`
+	Uptime             time.Duration            `json:"uptime"`
+	IndexingActive     bool                     `json:"indexing_active"`
+	IndexingPaused     bool                     `json:"indexing_paused"`
+	TotalFiles         int64                    `json:"total_files"`
+	IndexedFiles       int64                    `json:"indexed_files"`
+	PendingFiles       int64                    `json:"pending_files"`
+	FailedFiles        int64                    `json:"failed_files"`
+	SkippedFiles       int64                    `json:"skipped_files"`
+	DatabaseSize       int64                    `json:"database_size"`
+	DatabaseSizeInfo   map[string]interface{}   `json:"database_size_info"`
+	FileTypeBreakdown  []map[string]interface{} `json:"file_type_breakdown"`
+	CacheSize          int                      `json:"cache_size"`
+	ActiveSearches     int                      `json:"active_searches"`
+	ResourceUsage      ResourceUsage            `json:"resource_usage"`
+}
+
+// ResourceUsage represents system resource usage metrics
 type ResourceUsage struct {
 	CPUPercent    float64 `json:"cpu_percent"`
 	MemoryPercent float64 `json:"memory_percent"`
@@ -259,12 +308,14 @@ func (s *Server) parseJSON(r *http.Request, v interface{}) error {
 
 // WebSocket message types
 
+// WSMessage represents a WebSocket message
 type WSMessage struct {
 	Type      string          `json:"type"`
 	Timestamp time.Time       `json:"timestamp"`
 	Data      json.RawMessage `json:"data"`
 }
 
+// WSIndexingUpdate represents an indexing status update via WebSocket
 type WSIndexingUpdate struct {
 	Status       string  `json:"status"`
 	CurrentFile  string  `json:"current_file"`
@@ -274,6 +325,7 @@ type WSIndexingUpdate struct {
 	ErrorCount   int     `json:"error_count"`
 }
 
+// WSSearchUpdate represents a search status update via WebSocket
 type WSSearchUpdate struct {
 	QueryID     string `json:"query_id"`
 	Status      string `json:"status"`
