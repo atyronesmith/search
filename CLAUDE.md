@@ -66,7 +66,7 @@ make test-backend    # Run Go tests
 make logs-backend    # View backend logs
 ```
 
-### Desktop App Development  
+### Desktop App Development
 ```bash
 make dev-frontend      # Run desktop app in development mode (hot reload)
 make build-frontend    # Build production desktop app
@@ -93,16 +93,16 @@ ollama pull qwen3:4b # Download LLM model for query enhancement (auto-pulled if 
 
 ### Code Quality Requirements
 
-**⚠️ IMPORTANT: ALL GO CODE MUST PASS GOLINT WITHOUT ERRORS! ⚠️**
+**⚠️ IMPORTANT: ALL GO CODE MUST PASS GOLANGCI-LINT WITHOUT ERRORS! ⚠️**
 
 All Go code in this repository must:
-- Pass `golint` checks without any errors
+- Pass `golangci-lint` checks without any errors
 - Have proper documentation comments on all exported types, functions, and methods
 - Follow Go naming conventions (avoid stuttering type names)
 - Include justification comments for blank imports
 - Use idiomatic Go patterns (simplify if-else blocks where appropriate)
 
-Run `golint ./...` before committing any Go code changes. Fix all reported issues.
+Run `golangci-lint run` before committing any Go code changes. Fix all reported issues.
 
 ### Adding New API Methods
 When adding methods to the desktop app:
@@ -142,7 +142,7 @@ When adding methods to the desktop app:
 ## Key File Locations
 
 - `file-search-system/internal/api/` - HTTP handlers and server logic
-- `file-search-system/internal/service/` - Core business logic and orchestration  
+- `file-search-system/internal/service/` - Core business logic and orchestration
 - `file-search-system/internal/search/` - Hybrid search engine implementation
 - `file-search-system/pkg/extractor/` - Content extraction (text, code, **PDF** ✅)
 - `file-search-desktop/app.go` - Wails app methods (exposed to frontend)
@@ -153,7 +153,7 @@ When adding methods to the desktop app:
 ## Testing
 
 - **Backend tests**: `make test-backend` runs Go unit tests
-- **Frontend tests**: `make test-frontend` runs React component tests  
+- **Frontend tests**: `make test-frontend` runs React component tests
 - **API testing**: `make api-test` validates endpoint connectivity
 - **Database**: Test data reset via `/api/v1/database/reset` endpoint
 
@@ -192,7 +192,7 @@ The search system includes intelligent query processing using the phi3:mini LLM 
 
 ### Supported Query Types
 - **Content Pattern Detection**: "Find all files that contain a possible social security number"
-- **Semantic Analysis**: "Find files that contain tables with financial information"  
+- **Semantic Analysis**: "Find files that contain tables with financial information"
 - **Count Queries**: "How many files of type PDF are there?"
 - **Temporal Queries**: "Find files that were modified on Tuesday of last week"
 - **Creation vs Modification**: "Files created yesterday" vs "Files modified this week"
@@ -214,7 +214,7 @@ The system requires all services (database, Ollama, backend) to be running for f
 **NEVER modify the indexing configuration without explicit user permission!**
 
 The system is configured to index ONLY:
-- `~/Documents` (priority 1) 
+- `~/Documents` (priority 1)
 - `~/Desktop` (priority 2)
 - `~/Downloads` (priority 3)
 
@@ -245,7 +245,7 @@ podman exec file-search-db psql -U postgres -d file_search -c "DELETE FROM index
 ```
 
 **ONLY these 3 rules should exist:**
-- `~/Documents` (priority 1)  
+- `~/Documents` (priority 1)
 - `~/Desktop` (priority 2)
 - `~/Downloads` (priority 3)
 
@@ -253,7 +253,7 @@ podman exec file-search-db psql -U postgres -d file_search -c "DELETE FROM index
 
 **KNOWN ISSUE:** Even with correct configuration, the scanner may follow symbolic links and index unintended directories like:
 - `/Users/*/miniconda/` (Python environments)
-- `/Users/*/go/pkg/` (Go packages)  
+- `/Users/*/go/pkg/` (Go packages)
 - `/Users/*/dev/` (Development directories)
 
 **EMERGENCY FIX if this happens:**
@@ -293,8 +293,8 @@ podman exec file-search-db psql -U postgres -d file_search -c "SELECT SUBSTRING(
 
 **Expected file counts:**
 - Documents only: ~1000-3000 files
-- Downloads only: ~500-2000 files  
+- Downloads only: ~500-2000 files
 - Combined: < 5000 files total
 
 **If you see more than 10,000 files, the system is broken and needs immediate attention.**
-- all go code must pass golint
+- all go code must pass golangci-lint
