@@ -52,6 +52,7 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
     
     setLoading(true)
     setCurrentPage(1)  // Reset to first page
+    setTotalResults(0)  // Reset total results
     
     // Check if this might be an LLM query (conservative prediction)
     try {
@@ -85,6 +86,7 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
         // Update enhanced query state based on backend response
         setEnhancedQuery(searchResponse.enhanced_query || null)
         setUsedLLM(searchResponse.used_llm)
+        setTotalResults(searchResponse.total_count || 0)
         
         // Update LLM query status based on actual backend response
         setIsLLMQuery(searchResponse.used_llm)
@@ -414,7 +416,13 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
       {searchResults.length > 0 && (
         <div className="search-results">
           <div className="results-header">
-            <h2>Results ({searchResults.length})</h2>
+            <h2>
+              Results {totalResults > 0 ? (
+                <span>({Math.min(searchResults.length, totalResults)} of {totalResults})</span>
+              ) : (
+                <span>({searchResults.length})</span>
+              )}
+            </h2>
           </div>
           
           <div className="results-list">
@@ -496,7 +504,11 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
               fontSize: '14px', 
               color: '#666' 
             }}>
-              Showing {searchResults.length} results • Page {currentPage}
+              {totalResults > 0 ? (
+                <>Showing {(currentPage - 1) * resultsPerPage + 1}-{Math.min(currentPage * resultsPerPage, totalResults)} of {totalResults} results</>
+              ) : (
+                <>Showing {searchResults.length} results • Page {currentPage}</>
+              )}
             </div>
           </div>
         </div>
@@ -516,10 +528,11 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
           <div className="search-tips">
             <h4>Search Tips:</h4>
             <ul>
-              <li>Use specific keywords for better results</li>
-              <li>Search for code snippets, function names, or comments</li>
-              <li>File names and paths are also searchable</li>
-              <li>Use the Dashboard to monitor indexing progress</li>
+              <li>Use type filters: type:pdf, type:code, type:doc, type:text</li>
+              <li>Try natural language: "find all PDF files" or "how many Python files"</li>
+              <li>Combine terms with AND, OR, NOT operators</li>
+              <li>Use "quotes" for exact phrase matching</li>
+              <li>Date filters: after:2024-01-01 or before:2024-12-31</li>
             </ul>
           </div>
         </div>
@@ -549,7 +562,7 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
             boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>🔍 Search Help & Syntax</h2>
+              <h2 style={{ margin: 0 }}>🔍 Search Help & AI Enhancement</h2>
               <button 
                 onClick={() => setShowHelp(false)}
                 style={{
@@ -565,50 +578,53 @@ function SearchPage({ onSearch, onSearchWithDetails, searchQuery, searchResults 
             </div>
 
             <div style={{ lineHeight: '1.6' }}>
-              <h3>🔤 Basic Search</h3>
+              <h3>🧠 AI-Enhanced Natural Language</h3>
+              <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#e8f5ff', padding: '10px', borderRadius: '4px' }}>
+                <div>"find all PDF files" &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# File type queries</div>
+                <div>"how many Python files" &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Count queries</div>
+                <div>"financial documents" &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Semantic search</div>
+                <div>"SSN or credit card numbers" &nbsp;&nbsp;&nbsp;&nbsp;# Pattern detection</div>
+              </div>
+
+              <h3>🔤 Traditional Search</h3>
               <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: '10px', borderRadius: '4px' }}>
                 <div>search term &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Simple keyword search</div>
-                <div>multiple keywords &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Any of the terms</div>
-                <div>"exact phrase" &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Exact phrase search ✅</div>
+                <div>multiple keywords &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Searches for any term</div>
+                <div>"exact phrase" &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Exact phrase match</div>
               </div>
 
-              <h3>📁 File Type Filters ✅</h3>
+              <h3>📁 File Type Filters</h3>
               <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: '10px', borderRadius: '4px' }}>
-                <div>type:code &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Code files only</div>
-                <div>filetype:text &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Text files</div>
+                <div>type:pdf &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# PDF documents</div>
+                <div>type:code &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Source code files</div>
+                <div>type:doc &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Word documents</div>
+                <div>type:text &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Plain text files</div>
               </div>
-              <p><strong>Available types:</strong> code, text (YAML files are classified as code)</p>
+              <p><strong>Supported:</strong> PDF, DOC/DOCX, XLS/XLSX, CSV, TXT, MD, 25+ code formats</p>
 
-              <h3>📅 Date Filters ⚠️</h3>
-              <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: '10px', borderRadius: '4px' }}>
-                <div>after:2024-01-01 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Files modified after date</div>
-                <div>before:2024-12-31 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Files modified before date</div>
+              <h3>📅 Date Filters (Note: Limited Support)</h3>
+              <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#fff5e6', padding: '10px', borderRadius: '4px' }}>
+                <div>after:2024-01-01 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Files after date</div>
+                <div>before:2024-12-31 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Files before date</div>
               </div>
-              <p style={{ fontSize: '14px', color: '#d73527' }}>⚠️ Date filters are partially working - results change but may not filter correctly</p>
+              <p style={{ fontSize: '14px', color: '#d73527' }}>⚠️ Natural language date queries like "created yesterday" may not filter correctly</p>
 
-              <h3>🔍 Boolean Operators ✅</h3>
+              <h3>🔍 Boolean Operators</h3>
               <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: '10px', borderRadius: '4px' }}>
                 <div>term1 AND term2 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Both terms required</div>
                 <div>term1 OR term2 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Either term</div>
-                <div>term1 NOT term2 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# First but not second</div>
+                <div>term1 NOT term2 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Exclude term2</div>
               </div>
 
-              <h3>❌ Not Currently Working</h3>
-              <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666' }}>
-                <p><strong>Size filters:</strong> size:&gt;10MB, size:&lt;1KB</p>
-                <p><strong>Must include/exclude:</strong> +term, -term</p>
-                <p><strong>Extensions:</strong> ext:py, ext:js (use type: instead)</p>
+              <h3>💡 Example Queries</h3>
+              <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#e8ffe8', padding: '10px', borderRadius: '4px' }}>
+                <div>"API documentation" type:pdf &nbsp;&nbsp;&nbsp;&nbsp;# PDFs with phrase</div>
+                <div>budget created:last-month &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Recent budget files</div>
+                <div>TODO OR FIXME type:code &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Code with markers</div>
+                <div>"meeting notes" modified:today &nbsp;&nbsp;# Today's notes</div>
               </div>
 
-              <h3>💡 Working Examples</h3>
-              <div style={{ marginBottom: '20px', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: '10px', borderRadius: '4px' }}>
-                <div>"test: chart1" &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Exact phrase search</div>
-                <div>resources type:code &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Search in code files only</div>
-                <div>test AND chart &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Both terms required</div>
-                <div>resources filetype:text &nbsp;&nbsp;&nbsp;# Search in text files</div>
-              </div>
-
-              <p><strong>Note:</strong> Pagination with "Load More" is available for all searches.</p>
+              <p><strong>Note:</strong> AI automatically enhances natural language queries for better results.</p>
             </div>
           </div>
         </div>

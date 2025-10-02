@@ -115,13 +115,23 @@ body {
   flex: 1;
   padding: 30px;
   overflow-y: auto;
+  overflow-x: hidden;
   background-color: white;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Special handling for prompt page to fill full height */
+.main-content:has(.prompt-page) {
+  padding: 0;
+  overflow: hidden;
 }
 
 /* Search Page */
 .search-page {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .search-header {
@@ -137,7 +147,7 @@ body {
 .search-box {
   display: flex;
   gap: 10px;
-  max-width: 600px;
+  max-width: 800px;
 }
 
 .search-input {
@@ -344,8 +354,8 @@ body {
 
 /* Dashboard Page */
 .dashboard-page {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-header h1 {
@@ -634,11 +644,11 @@ body {
   padding: 0;
 }
 
-.prompt-content {
+.debug-page .prompt-content {
   max-height: 300px;
 }
 
-.response-content {
+.debug-page .response-content {
   max-height: 300px;
 }
 

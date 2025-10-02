@@ -67,6 +67,116 @@ export default function DebugPage() {
     }
   }
 
+  const copyToClipboard = async (text: string, buttonId: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      // Show feedback
+      const button = document.getElementById(buttonId)
+      if (button) {
+        const originalText = button.textContent
+        button.textContent = 'Copied!'
+        setTimeout(() => {
+          button.textContent = originalText
+        }, 2000)
+      }
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const formatSqlQuery = (query: string) => {
+    // If it already looks formatted (has newlines), return as-is
+    if (query.includes('\n')) {
+      return query
+    }
+    
+    // First pass: basic replacements
+    let formatted = query
+      // Ensure main keywords are uppercase
+      .replace(/\bselect\b/gi, 'SELECT')
+      .replace(/\bfrom\b/gi, 'FROM')
+      .replace(/\bjoin\b/gi, 'JOIN')
+      .replace(/\binner join\b/gi, 'JOIN')
+      .replace(/\bleft join\b/gi, 'JOIN')
+      .replace(/\bright join\b/gi, 'JOIN')
+      .replace(/\bwhere\b/gi, 'WHERE')
+      .replace(/\band\b/gi, 'AND')
+      .replace(/\bor\b/gi, 'OR')
+      .replace(/\border by\b/gi, 'ORDER BY')
+      .replace(/\bgroup by\b/gi, 'GROUP BY')
+      .replace(/\blimit\b/gi, 'LIMIT')
+      .replace(/\bas\b/gi, 'AS')
+      .replace(/\bon\b/gi, 'ON')
+    
+    // Split on major SQL keywords to restructure
+    const parts = formatted.split(/\b(SELECT|FROM|JOIN|WHERE|ORDER BY|GROUP BY|LIMIT)\b/)
+    
+    let result: string[] = []
+    let currentKeyword = ''
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim()
+      
+      if (['SELECT', 'FROM', 'JOIN', 'WHERE', 'ORDER BY', 'GROUP BY', 'LIMIT'].includes(part)) {
+        currentKeyword = part
+        result.push(part)
+      } else if (part) {
+        if (currentKeyword === 'SELECT') {
+          // Split SELECT items by comma and indent each
+          const items = part.split(',').map(item => item.trim()).filter(item => item)
+          if (items.length > 0) {
+            result.push('    ' + items[0])
+            for (let j = 1; j < items.length; j++) {
+              result.push('    ' + items[j] + ',')
+            }
+            // Remove comma from last item
+            if (result[result.length - 1].endsWith(',')) {
+              result[result.length - 1] = result[result.length - 1].slice(0, -1)
+            }
+          }
+        } else if (currentKeyword === 'WHERE') {
+          // Handle WHERE conditions
+          const conditions = part.split(/\b(AND|OR)\b/)
+          let firstCondition = true
+          for (let j = 0; j < conditions.length; j++) {
+            const cond = conditions[j].trim()
+            if (cond === 'AND' || cond === 'OR') {
+              result.push('    ' + cond)
+            } else if (cond) {
+              if (firstCondition) {
+                result.push('    ' + cond)
+                firstCondition = false
+              } else {
+                result[result.length - 1] += ' ' + cond
+              }
+            }
+          }
+        } else if (currentKeyword === 'JOIN') {
+          // Handle JOIN with ON clause
+          result[result.length - 1] += ' ' + part
+        } else if (currentKeyword === 'FROM') {
+          // Handle FROM clause
+          result.push('    ' + part)
+        } else if (currentKeyword === 'ORDER BY' || currentKeyword === 'GROUP BY') {
+          // Handle ORDER BY and GROUP BY
+          result.push('    ' + part)
+        } else if (currentKeyword === 'LIMIT') {
+          // Handle LIMIT on same line
+          result[result.length - 1] += ' ' + part
+        }
+      }
+    }
+    
+    // Clean up and join
+    return result
+      .filter(line => line.trim())
+      .map(line => {
+        // Ensure consistent spacing
+        return line.replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',')
+      })
+      .join('\n')
+  }
+
   return (
     <div className="debug-page">
       <div className="debug-header">
@@ -103,11 +213,6 @@ export default function DebugPage() {
       </div>
 
       <div className="debug-content">
-        <div className="model-info">
-          <strong>Current LLM Model:</strong> 
-          <span className="model-name">{currentModel}</span>
-        </div>
-
         {error && (
           <div className="error-message">
             Error: {error}
@@ -124,33 +229,54 @@ export default function DebugPage() {
           <div className="debug-details">
             <div className="debug-section">
               <h3>Query Information</h3>
-              <div className="debug-item">
-                <strong>Timestamp:</strong> {formatTimestamp(debugInfo.timestamp)}
-              </div>
-              <div className="debug-item">
-                <strong>Original Query:</strong> 
-                <pre>{debugInfo.query}</pre>
-              </div>
-              <div className="debug-item">
-                <strong>Processing Time:</strong> {debugInfo.process_time_ms}ms
-              </div>
-              {debugInfo.model && (
-                <div className="debug-item">
-                  <strong>Model Used:</strong> {debugInfo.model}
+              <div className="query-info-grid">
+                <div className="query-info-cell">
+                  <div className="query-info-header">Timestamp</div>
+                  <div className="query-info-textbox">{formatTimestamp(debugInfo.timestamp)}</div>
                 </div>
-              )}
+                <div className="query-info-cell">
+                  <div className="query-info-header">Processing Time</div>
+                  <div className="query-info-textbox">{debugInfo.process_time_ms}ms</div>
+                </div>
+                <div className="query-info-cell">
+                  <div className="query-info-header">Model Used</div>
+                  <div className="query-info-textbox">{debugInfo.model || 'N/A'}</div>
+                </div>
+              </div>
+              <div className="query-original">
+                <strong>Original Query:</strong>
+                <div className="query-text-box">{debugInfo.query}</div>
+              </div>
             </div>
 
             {debugInfo.prompt && (
               <div className="debug-section">
-                <h3>LLM Prompt</h3>
+                <h3>
+                  LLM Prompt
+                  <button 
+                    id="copy-prompt"
+                    className="header-copy-button"
+                    onClick={() => copyToClipboard(debugInfo.prompt, 'copy-prompt')}
+                  >
+                    Copy
+                  </button>
+                </h3>
                 <pre className="debug-prompt">{debugInfo.prompt}</pre>
               </div>
             )}
 
             {debugInfo.response && (
               <div className="debug-section">
-                <h3>LLM Response</h3>
+                <h3>
+                  LLM Response
+                  <button 
+                    id="copy-response"
+                    className="header-copy-button"
+                    onClick={() => copyToClipboard(formatJson(debugInfo.response), 'copy-response')}
+                  >
+                    Copy
+                  </button>
+                </h3>
                 <pre className="debug-response">{formatJson(debugInfo.response)}</pre>
               </div>
             )}
@@ -158,18 +284,38 @@ export default function DebugPage() {
             {(debugInfo.vector_query || debugInfo.text_query) && (
               <div className="debug-section">
                 <h3>Processed Queries</h3>
-                {debugInfo.vector_query && (
-                  <div className="debug-item">
-                    <strong>Vector Query:</strong>
-                    <pre>{debugInfo.vector_query}</pre>
-                  </div>
-                )}
-                {debugInfo.text_query && (
-                  <div className="debug-item">
-                    <strong>Text Query:</strong>
-                    <pre>{debugInfo.text_query}</pre>
-                  </div>
-                )}
+                <div className="processed-queries-stack">
+                  {debugInfo.text_query && (
+                    <div className="query-block">
+                      <div className="query-block-header">
+                        Text Query
+                        <button 
+                          id="copy-text-query"
+                          className="query-copy-button"
+                          onClick={() => copyToClipboard(formatSqlQuery(debugInfo.text_query || ''), 'copy-text-query')}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre className="query-block-content">{formatSqlQuery(debugInfo.text_query)}</pre>
+                    </div>
+                  )}
+                  {debugInfo.vector_query && (
+                    <div className="query-block">
+                      <div className="query-block-header">
+                        Vector Query
+                        <button 
+                          id="copy-vector-query"
+                          className="query-copy-button"
+                          onClick={() => copyToClipboard(formatSqlQuery(debugInfo.vector_query || ''), 'copy-vector-query')}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre className="query-block-content">{formatSqlQuery(debugInfo.vector_query)}</pre>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

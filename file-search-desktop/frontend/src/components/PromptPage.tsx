@@ -93,27 +93,51 @@ export default function PromptPage() {
   ]
 
   return (
-    <div className="prompt-page">
+    <div className="prompt-page prompt-page-wrapper">
       <div className="prompt-header">
         <h2>LLM Prompt Template</h2>
         <div className="prompt-actions">
           {hasChanges && (
             <span className="unsaved-indicator">Unsaved changes</span>
           )}
-          <button 
-            onClick={resetPrompt} 
-            disabled={!hasChanges || loading || saving}
-            className="reset-button"
-          >
-            Reset
-          </button>
-          <button 
-            onClick={savePrompt} 
-            disabled={!hasChanges || loading || saving}
-            className="save-button"
-          >
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          <div className="button-group">
+            <button 
+              onClick={resetPrompt} 
+              disabled={!hasChanges || loading || saving}
+              style={{
+                backgroundColor: (!hasChanges || loading || saving) ? '#93bbde' : '#3182ce',
+                color: 'white',
+                padding: '4px 12px',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                cursor: (!hasChanges || loading || saving) ? 'not-allowed' : 'pointer',
+                minWidth: '100px',
+                opacity: (!hasChanges || loading || saving) ? '0.7' : '1'
+              }}
+            >
+              Reset
+            </button>
+            <button 
+              onClick={savePrompt} 
+              disabled={!hasChanges || loading || saving}
+              style={{
+                backgroundColor: (!hasChanges || loading || saving) ? '#93bbde' : '#3182ce',
+                color: 'white',
+                padding: '4px 12px',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                cursor: (!hasChanges || loading || saving) ? 'not-allowed' : 'pointer',
+                minWidth: '100px',
+                opacity: (!hasChanges || loading || saving) ? '0.7' : '1'
+              }}
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
       </div>
 

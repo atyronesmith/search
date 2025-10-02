@@ -7,7 +7,7 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
-    "name": "Aaron Smith",
-    "email": "aasmith@redhat.com"
+    "name": "File Search Developer",
+    "email": "developer@example.com"
   }
 }

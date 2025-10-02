@@ -16,10 +16,30 @@ import (
 // CORS middleware
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		allowed := false
+
+		// Check if origin is in allowed list
+		if origin != "" && s.config != nil && len(s.config.AllowedOrigins) > 0 {
+			for _, allowedOrigin := range s.config.AllowedOrigins {
+				if allowedOrigin == "*" || allowedOrigin == origin {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		// Set CORS headers only for allowed origins
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else if s.config == nil || len(s.config.AllowedOrigins) == 0 {
+			// Fallback for development if no config
+			w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-WS-Token")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 
 		// Handle preflight requests
@@ -225,13 +245,18 @@ func (s *Server) getClientIP(r *http.Request) string {
 
 // validateAPIKey validates the provided API key
 func (s *Server) validateAPIKey(apiKey string) bool {
-	// Simple API key validation - in production, use proper authentication
-	validKeys := map[string]bool{
-		"file-search-dev-key":  true,
-		"file-search-prod-key": true,
+	// Check if API key validation is enabled (keys are configured)
+	if s.config == nil {
+		return false
 	}
 
-	return validKeys[apiKey]
+	// If no keys are configured, allow access (development mode)
+	if s.config.APIDevKey == "" && s.config.APIProdKey == "" {
+		return true
+	}
+
+	// Check against configured keys
+	return apiKey == s.config.APIDevKey || apiKey == s.config.APIProdKey
 }
 
 // Request size limiting middleware
