@@ -92,7 +92,7 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 	// Get file extension and validate actual content type
 	ext := strings.ToLower(filepath.Ext(filePath))
 	actualExt := ext
-	
+
 	// Validate file type and get the actual type
 	if e.validator != nil {
 		if validation, err := e.validator.ValidateFile(filePath); err == nil {
@@ -110,7 +110,7 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 			}
 		}
 	}
-	
+
 	// Check if the actual file type is supported
 	if !e.isSupported(actualExt) {
 		return nil, fmt.Errorf("unsupported file type: %s (detected as %s)", ext, actualExt)
@@ -123,7 +123,7 @@ func (e *UnstructuredExtractor) Extract(ctx context.Context, filePath string) (*
 	// Use HTTP API to extract content, passing the actual detected type
 	response, err := e.extractViaAPIWithType(extractCtx, filePath, actualExt)
 	if err != nil {
-		return nil, fmt.Errorf("extraction failed: %v", err)
+ 		return nil, fmt.Errorf("extraction failed: %v", err)
 	}
 
 	if response.Error != "" {
@@ -241,7 +241,7 @@ func (e *UnstructuredExtractor) extractViaAPIWithType(ctx context.Context, fileP
 			"adjusted_name": baseName,
 		}).Debug("Adjusted filename for correct type detection")
 	}
-	
+
 	return e.extractViaAPIInternal(ctx, filePath, baseName)
 }
 

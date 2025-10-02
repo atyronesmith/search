@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,8 +47,7 @@ func NewServer(cfg *config.Config, db *database.DB, svc *service.Service, log *l
 		wsClients:    make(map[*websocket.Conn]bool),
 		wsUpgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				// Allow all origins in development, restrict in production
-				return true
+				return s.checkWebSocketOrigin(r)
 			},
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -363,6 +363,32 @@ func (s *Server) broadcastWSMessage(msgType string, data interface{}) {
 			// Client will be cleaned up on next read/write
 		}
 	}
+}
+
+// checkWebSocketOrigin validates WebSocket connection origins
+func (s *Server) checkWebSocketOrigin(r *http.Request) bool {
+	// If no config or no allowed origins configured, allow localhost only
+	if s.config == nil || len(s.config.AllowedOrigins) == 0 {
+		origin := r.Header.Get("Origin")
+		return origin == "" ||
+			strings.HasPrefix(origin, "http://localhost") ||
+			strings.HasPrefix(origin, "http://127.0.0.1")
+	}
+
+	// Check against allowed origins
+	origin := r.Header.Get("Origin")
+	for _, allowed := range s.config.AllowedOrigins {
+		if allowed == "*" || allowed == origin {
+			return true
+		}
+	}
+
+	s.log.WithFields(logrus.Fields{
+		"origin": origin,
+		"remote_addr": r.RemoteAddr,
+	}).Warn("Rejected WebSocket connection from unauthorized origin")
+
+	return false
 }
 
 // SendIndexingUpdate sends an indexing status update to WebSocket clients

@@ -1,13 +1,32 @@
 # Plan: Incorporate Rich Metadata into Search Pipeline
 
-## Current State
+## Current State (Updated: 2025-09-11)
 We now extract extensive metadata from documents via Unstructured.io:
 - **Document structure**: headers, paragraphs, lists, tables
 - **Royal metadata**: titles, authors, dates, categories, languages
 - **File properties**: creation/modification dates, file types, sizes
 - **Content metadata**: page numbers, sections, emphasis levels
+- ✅ **Element-based chunking**: Implemented! Each chunk now preserves element type, emphasis scores, and hierarchy
+- ✅ **Enhanced Search Ranking**: Metadata-aware scoring boosts titles and headers in search results
 
-However, this metadata is stored but not actively used in search ranking or filtering.
+## Progress Tracker
+- ✅ Phase 1: Database Schema Enhancement - COMPLETED
+  - ✅ Phase 1.1: Element metadata columns added to chunks table
+  - ✅ Phase 1.2: Element-based Chunking - Fully implemented and tested
+- ✅ Phase 2: Enhanced Search Integration - Completed 2025-09-11
+  - Added emphasis_score, element_type, is_title, is_header to Result struct
+  - Updated vector and text search queries to include element metadata
+  - Implemented metadata-aware scoring with emphasis boost (2x for titles, 1.5x for headers)
+  - Adjusted hybrid search weights: Vector(40%), BM25(35%), Metadata(15%)
+  - Tested with element_test.md file confirming proper boost
+- ✅ Phase 3: Search Ranking Enhancement - Completed 2025-09-11
+  - Metadata-aware scoring integrated into calculateMetadataScore()
+  - Hybrid search weights properly adjusted
+  - Element emphasis working in production
+- ⏳ Phase 4: Advanced Filtering - Next up
+- ⏳ Phase 5: Smart Result Grouping
+- ⏳ Phase 6: LLM Enhancement Integration
+- ⏳ Phase 7: Search UI Enhancements
 
 ## Phase 1: Database Schema Enhancement (Week 1)
 
@@ -75,37 +94,19 @@ func (m *MetadataProcessor) ProcessRoyalMetadata(fileID int64, metadata map[stri
 - Parse Unstructured's element types (NarrativeText, Title, Header, Table, etc.)
 - Map emphasis levels from royal metadata to chunk importance
 
-## Phase 3: Search Ranking Enhancement (Week 2)
+## Phase 3: Search Ranking Enhancement (Week 2) ✅ COMPLETED
 
-### 3.1 Metadata-Aware Scoring
-```go
-// internal/search/ranker.go
-type MetadataRanker struct {
-    emphasisWeight float64  // Boost for headers/titles
-    recencyWeight  float64  // Boost for recent documents
-    authorityWeight float64 // Boost for certain authors/sources
-}
+### 3.1 Metadata-Aware Scoring ✅ IMPLEMENTED
+The metadata scoring has been integrated directly into `internal/search/engine.go`:
+- `calculateMetadataScore()` function applies emphasis boosts
+- Title elements get 2x emphasis score multiplier + 20% additional boost
+- Header elements get 1.5x emphasis score multiplier + 10% additional boost
+- File type, path, and extension relevance factors also included
 
-func (r *MetadataRanker) ScoreResult(result *Result) float64 {
-    baseScore := result.Score
-    
-    // Boost headers and titles
-    if result.EmphasisLevel > 0 {
-        baseScore *= (1 + r.emphasisWeight * float64(result.EmphasisLevel))
-    }
-    
-    // Boost recent documents
-    age := time.Since(result.ModificationDate).Hours() / 24
-    recencyBoost := math.Exp(-age / 365) // Exponential decay over a year
-    baseScore *= (1 + r.recencyWeight * recencyBoost)
-    
-    return baseScore
-}
-```
-
-### 3.2 Update Hybrid Search
-- Add metadata scoring as 4th component (Vector + BM25 + Metadata + Recency)
-- Adjust weights: Vector(40%), BM25(35%), Metadata(15%), Recency(10%)
+### 3.2 Update Hybrid Search ✅ COMPLETED
+- Metadata scoring integrated as component in RRF scoring
+- Weights adjusted in `DefaultConfig()`: Vector(40%), BM25(35%), Metadata(15%)
+- Remaining 10% reserved for future recency scoring implementation
 
 ## Phase 4: Advanced Filtering (Week 2-3)
 

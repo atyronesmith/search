@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/file-search/file-search-system/internal/security"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
@@ -63,6 +64,11 @@ func (e *TextExtractor) CanExtract(filePath string) bool {
 
 // Extract extracts content from a text file
 func (e *TextExtractor) Extract(ctx context.Context, filePath string) (*ExtractedContent, error) {
+	// Validate path security
+	if err := security.ValidateFilePath(filePath); err != nil {
+		return nil, fmt.Errorf("unsafe file path: %w", err)
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err

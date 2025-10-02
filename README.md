@@ -217,10 +217,10 @@ Edit `file-search-system/.env`:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://file_search_user:CHANGE_ME@localhost:5432/file_search_db?sslmode=disable
+DATABASE_URL=postgresql://username:password@localhost:5432/database_name?sslmode=disable
 
 # Indexing
-INDEXING_PATHS=/Users,/Documents,/Projects
+INDEXING_PATHS=~/Documents,~/Downloads
 INDEXING_IGNORE_PATTERNS=*.tmp,node_modules/**,.git/**
 
 # Performance  

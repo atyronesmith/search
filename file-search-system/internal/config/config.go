@@ -23,9 +23,14 @@ type Config struct {
 	OllamaTimeout time.Duration
 
 	// API Server
-	APIHost    string
-	APIPort    int
-	APIWorkers int
+	APIHost         string
+	APIPort         int
+	APIWorkers      int
+	APIDevKey       string   // Development API key
+	APIProdKey      string   // Production API key
+	AllowedOrigins  []string // CORS allowed origins
+	RequireWSAuth   bool     // Require authentication for WebSocket
+	WSAuthToken     string   // WebSocket authentication token
 
 	// Indexing
 	IndexBatchSize     int
@@ -140,9 +145,14 @@ func LoadFromFiles(configPath string) (*Config, error) {
 		OllamaTimeout: getEnvDurationOrConfig(parser, "OLLAMA_TIMEOUT", "ollama", "timeout", 30*time.Second),
 
 		// API
-		APIHost:    getEnvOrConfig(parser, "API_HOST", "server", "host", "127.0.0.1"),
-		APIPort:    getEnvIntOrConfig(parser, "API_PORT", "server", "port", 8080),
-		APIWorkers: getEnvIntOrConfig(parser, "API_WORKERS", "monitoring", "max_workers", 4),
+		APIHost:        getEnvOrConfig(parser, "API_HOST", "server", "host", "127.0.0.1"),
+		APIPort:        getEnvIntOrConfig(parser, "API_PORT", "server", "port", 8080),
+		APIWorkers:     getEnvIntOrConfig(parser, "API_WORKERS", "monitoring", "max_workers", 4),
+		APIDevKey:      getEnvOrConfig(parser, "API_DEV_KEY", "api_keys", "dev_key", ""),
+		APIProdKey:     getEnvOrConfig(parser, "API_PROD_KEY", "api_keys", "prod_key", ""),
+		AllowedOrigins: getEnvStringSliceOrConfig(parser, "ALLOWED_ORIGINS", "security", "allowed_origins", []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"}),
+		RequireWSAuth:  getEnvBoolOrConfig(parser, "REQUIRE_WS_AUTH", "security", "require_ws_auth", true),
+		WSAuthToken:    getEnvOrConfig(parser, "WS_AUTH_TOKEN", "api_keys", "ws_token", ""),
 
 		// Indexing
 		IndexBatchSize:     getEnvIntOrConfig(parser, "INDEX_BATCH_SIZE", "indexing", "batch_size", 32),
@@ -202,8 +212,8 @@ func LoadFromFiles(configPath string) (*Config, error) {
 // LoadFromEnv loads configuration from environment variables only (fallback)
 func LoadFromEnv() (*Config, error) {
 	cfg := &Config{
-		// Database defaults
-		DatabaseURL:     getEnv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/file_search?sslmode=disable"),
+		// Database defaults (use empty default to force configuration)
+		DatabaseURL:     getEnv("DATABASE_URL", ""),
 		DatabasePool:    getEnvInt("DATABASE_POOL_SIZE", 10),
 		DatabaseTimeout: getEnvDuration("DATABASE_TIMEOUT", "30s"),
 
@@ -215,9 +225,14 @@ func LoadFromEnv() (*Config, error) {
 		OllamaTimeout: getEnvDuration("OLLAMA_TIMEOUT", "30s"),
 
 		// API defaults
-		APIHost:    getEnv("API_HOST", "127.0.0.1"),
-		APIPort:    getEnvInt("API_PORT", 8080),
-		APIWorkers: getEnvInt("API_WORKERS", 4),
+		APIHost:        getEnv("API_HOST", "127.0.0.1"),
+		APIPort:        getEnvInt("API_PORT", 8080),
+		APIWorkers:     getEnvInt("API_WORKERS", 4),
+		APIDevKey:      getEnv("API_DEV_KEY", ""),
+		APIProdKey:     getEnv("API_PROD_KEY", ""),
+		AllowedOrigins: getEnvStringSlice("ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"}),
+		RequireWSAuth:  getEnvBool("REQUIRE_WS_AUTH", true),
+		WSAuthToken:    getEnv("WS_AUTH_TOKEN", ""),
 
 		// Indexing defaults
 		IndexBatchSize:     getEnvInt("INDEX_BATCH_SIZE", 32),

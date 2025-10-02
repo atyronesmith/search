@@ -65,6 +65,7 @@ func NewManager(config *Config) *Manager {
 	chunkers := make(map[string]Chunker)
 
 	// Add default chunkers
+	chunkers["element"] = NewElementChunker()
 	chunkers["semantic"] = NewSemanticChunker()
 	chunkers["sliding"] = NewSlidingWindowChunker()
 	chunkers["code"] = NewCodeChunker()
@@ -89,6 +90,12 @@ func (cm *Manager) ChunkContent(content *extractor.ExtractedContent, fileType st
 
 // selectChunker selects the appropriate chunker based on content type
 func (cm *Manager) selectChunker(fileType string, content *extractor.ExtractedContent) Chunker {
+	// Check if we have element data from Unstructured
+	if elements, ok := content.Metadata["elements"].([]interface{}); ok && len(elements) > 0 {
+		// Use element chunker when we have Unstructured elements
+		return cm.chunkers["element"]
+	}
+
 	// Priority order for chunker selection
 	chunkerOrder := []string{"code", "semantic", "sliding"}
 
