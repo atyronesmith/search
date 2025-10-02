@@ -47,9 +47,9 @@ type Config struct {
 // DefaultConfig returns default search configuration
 func DefaultConfig() *Config {
 	return &Config{
-		VectorWeight:   0.4,
-		BM25Weight:     0.5,
-		MetadataWeight: 0.1,
+		VectorWeight:   0.4,  // 40% for vector similarity
+		BM25Weight:     0.35, // 35% for text relevance (reduced from 50%)
+		MetadataWeight: 0.15, // 15% for metadata including emphasis scores (increased from 10%)
 		DefaultLimit:   20,
 		CacheTTL:       15 * time.Minute,
 		MinScore:       0.2,
@@ -120,6 +120,10 @@ type Result struct {
 	VectorScore   float64                `json:"vector_score"`
 	TextScore     float64                `json:"text_score"`
 	MetadataScore float64                `json:"metadata_score"`
+	EmphasisScore float64                `json:"emphasis_score,omitempty"`
+	ElementType   string                 `json:"element_type,omitempty"`
+	IsTitle       bool                   `json:"is_title,omitempty"`
+	IsHeader      bool                   `json:"is_header,omitempty"`
 	Highlights    []string               `json:"highlights"`
 	StartLine     *int                   `json:"start_line,omitempty"`
 	EndLine       *int                   `json:"end_line,omitempty"`
@@ -506,6 +510,10 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 			c.char_end,
 			c.start_line,
 			c.metadata as chunk_metadata,
+			c.emphasis_score,
+			c.element_type,
+			c.is_title,
+			c.is_header,
 			f.path,
 			f.filename,
 			f.file_type,
@@ -545,6 +553,7 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 	for rows.Next() {
 		var result Result
 		var chunkMetadata, fileMetadata json.RawMessage
+		var elementType *string
 
 		err := rows.Scan(
 			&result.ChunkID,
@@ -554,6 +563,10 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 			&result.CharEnd,
 			&result.StartLine,
 			&chunkMetadata,
+			&result.EmphasisScore,
+			&elementType,
+			&result.IsTitle,
+			&result.IsHeader,
 			&result.FilePath,
 			&result.Filename,
 			&result.FileType,
@@ -563,6 +576,11 @@ func (e *Engine) vectorSearch(ctx context.Context, req *Request) ([]Result, erro
 		if err != nil {
 			e.log.WithError(err).Error("Failed to scan vector search result")
 			continue
+		}
+
+		// Set element type if not null
+		if elementType != nil {
+			result.ElementType = *elementType
 		}
 
 		// Parse metadata
@@ -619,6 +637,10 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 			c.char_end,
 			c.start_line,
 			c.metadata as chunk_metadata,
+			c.emphasis_score,
+			c.element_type,
+			c.is_title,
+			c.is_header,
 			f.path,
 			f.filename,
 			f.file_type,
@@ -664,6 +686,7 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 		var result Result
 		var chunkMetadata, fileMetadata json.RawMessage
 		var headline string
+		var elementType *string
 
 		err := rows.Scan(
 			&result.ChunkID,
@@ -673,6 +696,10 @@ func (e *Engine) textSearch(ctx context.Context, req *Request, processedQuery *P
 			&result.CharEnd,
 			&result.StartLine,
 			&chunkMetadata,
+			&result.EmphasisScore,
+			&elementType,
+			&result.IsTitle,
+			&result.IsHeader,
 			&result.FilePath,
 			&result.Filename,
 			&result.FileType,
@@ -882,6 +909,19 @@ func (e *Engine) combineResults(vectorResults, textResults []Result, req *Reques
 func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 	score := 0.5 // Base score
 
+	// Apply emphasis score boost for titles and headers
+	// EmphasisScore is typically 2.0 for titles, 1.5 for headers, 1.0 for normal text
+	if result.EmphasisScore > 0 {
+		score *= result.EmphasisScore
+	}
+
+	// Additional boost for title elements
+	if result.IsTitle {
+		score *= 1.2
+	} else if result.IsHeader {
+		score *= 1.1
+	}
+
 	// File type relevance
 	if len(req.FileTypes) > 0 {
 		for _, ft := range req.FileTypes {
@@ -912,9 +952,10 @@ func (e *Engine) calculateMetadataScore(result *Result, req *Request) float64 {
 		}
 	}
 
-	// Normalize to 0-1 range
-	if score > 1.0 {
-		score = 1.0
+	// Normalize to 0-1 range (though with emphasis it may exceed 1.0, which is fine for ranking)
+	// We'll cap it at a reasonable maximum to prevent extreme outliers
+	if score > 3.0 {
+		score = 3.0
 	}
 
 	return score

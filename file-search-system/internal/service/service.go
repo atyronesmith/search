@@ -22,6 +22,7 @@ import (
 	"github.com/file-search/file-search-system/internal/search"
 	"github.com/file-search/file-search-system/pkg/chunker"
 	"github.com/file-search/file-search-system/pkg/extractor"
+	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
 	"github.com/sirupsen/logrus"
 )
@@ -1398,12 +1399,49 @@ func (s *Service) processChunk(ctx context.Context, fileID int64, chunk *chunker
 	default:
 	}
 
-	// Insert chunk
+	// Extract element metadata if present
+	var elementType *string
+	var elementTypes interface{} // Will use pq.Array for PostgreSQL array
+	var categoryDepth *int
+	var parentElementID *string
+	var isTitle, isHeader bool
+	var emphasisScore float64 = 1.0
+
+	if chunk.Metadata != nil {
+		if et, ok := chunk.Metadata["element_type"].(string); ok {
+			elementType = &et
+		}
+		// Convert []string to PostgreSQL array format using pq.Array
+		if ets, ok := chunk.Metadata["element_types"].([]string); ok {
+			if len(ets) > 0 {
+				elementTypes = pq.Array(ets)
+			}
+		}
+		if cd, ok := chunk.Metadata["category_depth"].(int); ok {
+			categoryDepth = &cd
+		}
+		if pid, ok := chunk.Metadata["parent_element_id"].(string); ok {
+			parentElementID = &pid
+		}
+		if it, ok := chunk.Metadata["is_title"].(bool); ok {
+			isTitle = it
+		}
+		if ih, ok := chunk.Metadata["is_header"].(bool); ok {
+			isHeader = ih
+		}
+		if es, ok := chunk.Metadata["emphasis_score"].(float64); ok {
+			emphasisScore = es
+		}
+	}
+
+	// Insert chunk with element metadata
 	chunkQuery := `
 		INSERT INTO chunks (
 			file_id, chunk_index, content, embedding, start_line,
-			char_start, char_end, chunk_type, metadata
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			char_start, char_end, chunk_type, metadata,
+			element_type, element_types, category_depth, parent_element_id,
+			is_title, is_header, emphasis_score
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING id
 	`
 
@@ -1412,6 +1450,8 @@ func (s *Service) processChunk(ctx context.Context, fileID int64, chunk *chunker
 		fileID, chunk.Index, chunk.Content, pgEmbedding,
 		chunk.StartLine, chunk.StartChar, chunk.EndChar,
 		chunk.Type, metadata,
+		elementType, elementTypes, categoryDepth, parentElementID,
+		isTitle, isHeader, emphasisScore,
 	).Scan(&chunkID)
 
 	if err != nil {

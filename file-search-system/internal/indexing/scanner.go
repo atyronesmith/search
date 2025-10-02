@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/file-search/file-search-system/internal/database"
+	"github.com/file-search/file-search-system/internal/security"
 	"github.com/file-search/file-search-system/pkg/filesystem"
 	"github.com/sirupsen/logrus"
 )
@@ -181,7 +182,8 @@ func (s *Scanner) isSupported(ext string) bool {
 
 // calculateFileHash calculates SHA-256 hash of a file
 func (s *Scanner) calculateFileHash(path string) (string, error) {
-	file, err := os.Open(path)
+	// Use secure file opening with path validation
+	file, err := security.SecureOpen(path, s.config.WatchPaths)
 	if err != nil {
 		return "", err
 	}

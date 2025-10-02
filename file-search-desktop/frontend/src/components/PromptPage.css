@@ -1,74 +1,85 @@
 .prompt-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
-  height: calc(100vh - 100px);
-  display: flex;
-  flex-direction: column;
+  margin: 0;
+  box-sizing: border-box;
+  background-color: white;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 20px;
 }
 
 .prompt-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 10px;
+  margin: 0 0 20px 0;
+  padding: 0 0 10px 0;
   border-bottom: 2px solid #e0e0e0;
+  flex-shrink: 0;
 }
 
 .prompt-header h2 {
   margin: 0;
   color: #333;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .prompt-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 
 .unsaved-indicator {
   color: #ff9800;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
-  padding: 4px 8px;
+  padding: 4px 10px;
   background-color: #fff3e0;
   border-radius: 4px;
 }
 
-.save-button,
-.reset-button {
-  padding: 8px 16px;
-  border: none;
+.button-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.prompt-action-button {
+  padding: 4px 12px;
+  background-color: #3182ce !important;
+  color: white !important;
+  border: none !important;
   border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 14px;
-  transition: all 0.3s;
+  transition: background-color 0.2s;
+  min-width: 100px;
 }
 
-.save-button {
-  background-color: #4CAF50;
-  color: white;
+.prompt-action-button:hover:not(:disabled) {
+  background-color: #2c5282 !important;
+  color: white !important;
 }
 
-.save-button:hover:not(:disabled) {
-  background-color: #45a049;
+.prompt-action-button:active:not(:disabled) {
+  background-color: #2a4e7c !important;
+  color: white !important;
 }
 
-.reset-button {
-  background-color: #f44336;
-  color: white;
-}
-
-.reset-button:hover:not(:disabled) {
-  background-color: #da190b;
-}
-
-.save-button:disabled,
-.reset-button:disabled {
-  background-color: #cccccc;
+.prompt-action-button:disabled {
+  background-color: #cbd5e0 !important;
   cursor: not-allowed;
   opacity: 0.6;
+  color: #718096 !important;
 }
 
 .message {
@@ -102,19 +113,22 @@
 }
 
 .prompt-content {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 350px;
   gap: 20px;
-  flex: 1;
   min-height: 0;
+  overflow: hidden;
+  align-items: start;
 }
 
 .prompt-editor {
-  flex: 1;
   display: flex;
   flex-direction: column;
   background-color: white;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
+  min-width: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -122,24 +136,26 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 15px;
-  background-color: #f5f5f5;
-  border-bottom: 1px solid #e0e0e0;
+  padding: 10px 15px;
+  background-color: #4a5568;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
 }
 
 .editor-header h3 {
   margin: 0;
   font-size: 16px;
-  color: #555;
+  color: white;
+  font-weight: 600;
 }
 
 .character-count {
-  color: #666;
-  font-size: 13px;
-  background-color: white;
-  padding: 4px 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
   border-radius: 4px;
-  border: 1px solid #ddd;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .loading-state {
@@ -159,6 +175,7 @@
   resize: none;
   outline: none;
   background-color: #fafafa;
+  min-height: 0;
 }
 
 .prompt-textarea:focus {
@@ -166,10 +183,12 @@
 }
 
 .prompt-sidebar {
-  width: 350px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  overflow-y: auto;
+  height: 100%;
+  padding-right: 10px;
 }
 
 .variables-section,
@@ -179,17 +198,19 @@
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 15px;
+  flex-shrink: 0;
 }
 
 .variables-section h3,
 .tips-section h3,
 .info-section h3 {
-  margin-top: 0;
-  margin-bottom: 12px;
+  margin: -15px -15px 12px -15px;
+  padding: 10px 15px;
   font-size: 16px;
-  color: #555;
-  border-bottom: 1px solid #f0f0f0;
-  padding-bottom: 8px;
+  color: white;
+  background-color: #4a5568;
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
 }
 
 .variables-description {
@@ -202,6 +223,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: none;
 }
 
 .variable-item {

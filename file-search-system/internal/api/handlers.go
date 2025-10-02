@@ -539,6 +539,24 @@ func (s *Server) handleQueryPerformanceStats(w http.ResponseWriter, r *http.Requ
 // WebSocket handler
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Check WebSocket authentication if required
+	if s.config != nil && s.config.RequireWSAuth {
+		// Check for auth token in query params or header
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			token = r.Header.Get("X-WS-Token")
+		}
+
+		if token == "" || (s.config.WSAuthToken != "" && token != s.config.WSAuthToken) {
+			// Also check against API keys as fallback
+			if !s.validateAPIKey(token) {
+				s.log.WithField("remote_addr", r.RemoteAddr).Warn("Unauthorized WebSocket connection attempt")
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+	}
+
 	conn, err := s.wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to upgrade WebSocket connection")

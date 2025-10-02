@@ -103,21 +103,23 @@ func (h *dbHelper) updateFileMetadata(ctx context.Context, fileID int64, field s
 	if err := ctx.Err(); err != nil {
 		return ErrContextCanceled
 	}
-	
-	// Map field names to column names
-	columnMap := map[string]string{
-		"file_type":         "file_type",
-		"extraction_method": "extraction_method",
-		"royal_metadata":    "royal_metadata",
-		"content_hash":      "content_hash",
-	}
-	
-	column, ok := columnMap[field]
-	if !ok {
+
+	// Use prepared statements for each allowed field to prevent SQL injection
+	// Each case uses a static query string, eliminating dynamic SQL construction
+	var query string
+	switch field {
+	case "file_type":
+		query = `UPDATE files SET file_type = $1 WHERE id = $2`
+	case "extraction_method":
+		query = `UPDATE files SET extraction_method = $1 WHERE id = $2`
+	case "royal_metadata":
+		query = `UPDATE files SET royal_metadata = $1 WHERE id = $2`
+	case "content_hash":
+		query = `UPDATE files SET content_hash = $1 WHERE id = $2`
+	default:
 		return fmt.Errorf("invalid metadata field: %s", field)
 	}
-	
-	query := fmt.Sprintf(`UPDATE files SET %s = $1 WHERE id = $2`, column)
+
 	_, err := h.db.Exec(ctx, query, value, fileID)
 	if err != nil {
 		return &DatabaseError{
@@ -126,6 +128,6 @@ func (h *dbHelper) updateFileMetadata(ctx context.Context, fileID int64, field s
 			Err:       err,
 		}
 	}
-	
+
 	return nil
 }

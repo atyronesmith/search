@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # ✅✅✅ INDEXING SCOPE BUG - FIXED 2025-01-09 ✅✅✅
 
 **CRITICAL FIX APPLIED**: The indexing scope bug has been FIXED. The system was indexing 100,000+ files because:
-1. **DashboardPage.tsx** was hardcoded to use `/home/user` instead of configured paths
+1. **DashboardPage.tsx** was hardcoded to use user home directory instead of configured paths
 2. **api_client.go** had fallback logic to use `/Users` directory
 3. **Backend** wasn't using configured `WATCH_PATHS` when no paths provided
 
