@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.11.2
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	golang.org/x/text v0.34.0
 	golang.org/x/time v0.14.0
 )
