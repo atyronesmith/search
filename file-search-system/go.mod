@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.24.4
 
 require (
-	github.com/fsnotify/fsnotify v1.7.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.1
@@ -17,7 +17,7 @@ require (
 	golang.org/x/time v0.5.0
 )
 
-require github.com/gabriel-vasile/mimetype v1.4.10 // indirect
+require github.com/gabriel-vasile/mimetype v1.4.10
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
