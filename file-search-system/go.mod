@@ -17,7 +17,7 @@ require (
 	golang.org/x/time v0.14.0
 )
 
-require github.com/gabriel-vasile/mimetype v1.4.10
+require github.com/gabriel-vasile/mimetype v1.4.13
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
