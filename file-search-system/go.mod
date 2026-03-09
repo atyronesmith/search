@@ -1,8 +1,6 @@
 module github.com/file-search/file-search-system
 
-go 1.24.0
-
-toolchain go1.24.4
+go 1.25.0
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
@@ -14,7 +12,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.9.4
 	golang.org/x/text v0.34.0
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.15.0
 )
 
 require github.com/gabriel-vasile/mimetype v1.4.13
