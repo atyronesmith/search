@@ -369,7 +369,7 @@ function SettingsPage() {
                   }}
                 />
                 <div style={{ fontSize: '13px', color: '#495057', marginTop: '8px', backgroundColor: '#e9ecef', padding: '8px', borderRadius: '4px' }}>
-                  <strong>Tips:</strong> Enter one directory per line. Use full paths like <code>~/Documents</code>. 
+                  <strong>Tips:</strong> Enter one directory per line. Use full paths like <code>~/Documents</code>.
                   Avoid system directories like <code>/usr/</code>, <code>/Applications/</code>, or development folders.
                 </div>
               </div>

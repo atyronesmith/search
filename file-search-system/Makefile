@@ -17,7 +17,7 @@ COMPOSE_CMD ?= podman-compose
 # Database configuration
 DB_NAME = file_search
 DB_USER = postgres
-DB_PASSWORD = CHANGE_ME
+DB_PASSWORD ?= $(shell echo $${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD env var})
 DB_HOST = localhost
 DB_PORT = 5432
 

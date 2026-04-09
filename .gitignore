@@ -16,6 +16,7 @@ file-search-desktop/build/bin/*
 # Go binaries
 /bin/
 /build/
+file-search-system/bin/
 file-search-system/file-search-system
 file-search-desktop/file-search-desktop
 
