@@ -205,7 +205,7 @@ func NewService(cfg *config.Config, db *database.DB, log *logrus.Logger) (*Servi
 
 	// Unstructured.io configuration for comprehensive document processing
 	unstructuredConfig := extractor.UnstructuredConfig{
-		VenvPath: "file-search-system/unstructured-venv",
+		VenvPath: filepath.Join(os.Getenv("PROJECT_ROOT"), "file-search-system", "unstructured-venv"),
 		Timeout:  300 * time.Second, // Increased to 5 minutes for large files
 	}
 
