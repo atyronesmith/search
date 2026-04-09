@@ -1,9 +1,9 @@
-Employee Records - Confidential
+Employee Records - SAMPLE TEST DATA (All values are fictional)
 
 Name: Jane Doe
 SSN: XXX-XX-XXXX
-Date of Birth: March 15, 1985
-Address: 742 Evergreen Terrace, Springfield, IL 62704
+Date of Birth: January 1, 1990
+Address: 123 Test Street, Anytown, ST 00000
 Phone: (555) 000-0000
 Email: jane.doe@example.com
 
@@ -11,12 +11,12 @@ Emergency Contact: John Doe (Spouse)
 Phone: (555) 000-0001
 
 Health Insurance ID: TEST-000000
-Credit Card on File: XXXX-XXXX-XXXX-0000 (Visa, Exp: 12/25)
+Credit Card on File: XXXX-XXXX-XXXX-0000 (Test, Exp: 01/30)
 
-Annual Salary: $85,000
+Annual Salary: $XX,XXX
 Department: Marketing
-Start Date: January 8, 2020
-Employee ID: EMP-2020-0134
+Start Date: January 1, 2020
+Employee ID: EMP-0000-0000
 
 Performance Review: Exceeds expectations
 Last Promotion: July 1, 2023

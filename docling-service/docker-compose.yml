@@ -11,7 +11,7 @@ services:
     volumes:
       # Optional: Mount local directories for file access
       - /tmp:/tmp:ro
-      - ~/Downloads:/downloads:ro
+      - ${HOME}/Downloads:/downloads:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
