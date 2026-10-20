@@ -20,7 +20,7 @@ interface ApiProviderProps {
 }
 
 export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
-  const api = new ApiService(process.env.REACT_APP_API_URL || 'http://localhost:8080');
+  const api = new ApiService(import.meta.env.VITE_API_URL || 'http://localhost:8080');
 
   return (
     <ApiContext.Provider value={{ api }}>

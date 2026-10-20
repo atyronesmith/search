@@ -46,7 +46,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
 
   useEffect(() => {
-    const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8080';
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
     const newSocket = io(wsUrl, {
       path: '/api/v1/ws',
       transports: ['websocket'],

@@ -37,7 +37,7 @@ npm run dev
 ```
 
 This will:
-1. Start the React development server on http://localhost:3000
+1. Start the Vite development server on http://localhost:3000
 2. Launch Electron in development mode once React is ready
 
 ## Building
@@ -62,8 +62,8 @@ This creates distributable packages in the `dist` folder:
 Edit `.env` file to configure API endpoints:
 
 ```env
-REACT_APP_API_URL=http://localhost:8080
-REACT_APP_WS_URL=ws://localhost:8080
+VITE_API_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080
 ```
 
 ## Project Structure
@@ -136,9 +136,9 @@ src/
 
 ## Scripts
 
-- `npm start`: Start React development server
-- `npm run build`: Build React app for production
-- `npm test`: Run tests
+- `npm start`: Start Vite development server
+- `npm run build`: Type-check and build for production (into `build/`)
+- `npm run preview`: Serve the production build locally
 - `npm run electron`: Run Electron with built app
 - `npm run electron-dev`: Run Electron in development mode
 - `npm run dev`: Run both React and Electron in development
@@ -146,8 +146,8 @@ src/
 
 ## Requirements
 
-- Node.js 16+
-- npm 8+
+- Node.js 20+
+- npm 10+
 - Backend API server running on port 8080
 
 ## License
