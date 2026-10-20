@@ -23,7 +23,7 @@ Modern Electron + React frontend for the File Search System.
 
 ### Prerequisites
 
-- Node.js 16+ and npm
+- Node.js 20+ and npm 10+
 - Backend Go service running on `localhost:8080`
 
 ### Installation
