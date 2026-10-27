@@ -7,10 +7,10 @@ certifi==2026.10.19
 charset-normalizer==3.4.3
 click==8.2.1
 dill==0.4.0
-docling==2.132.0
-docling-core==2.99.0
-docling-ibm-models==4.0.2
-docling-parse==7.22.1
+docling==2.142.0
+docling-core==2.104.0
+docling-ibm-models==4.0.4
+docling-parse==7.22.4
 easyocr==1.7.2
 et_xmlfile==2.0.0
 Faker==37.6.0
@@ -45,7 +45,7 @@ opencv-python-headless==4.11.0.86
 openpyxl==3.1.5
 packaging==25.0
 pandas==2.3.2
-pillow==12.3.0
+pillow==13.0.0
 pluggy==1.6.0
 polyfactory==2.22.2
 psutil==7.0.0
@@ -99,8 +99,8 @@ xlsxwriter==3.2.5
 annotated-doc==0.0.5
 colorlog==6.12.0
 defusedxml==0.7.1
-doclang==0.7.3
-docling-slim==2.132.0
+doclang==0.8.0
+docling-slim==2.142.0
 httpcore==1.0.9
 httpx==0.28.1
 langcodes==3.5.1
