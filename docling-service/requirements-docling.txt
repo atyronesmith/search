@@ -15,7 +15,7 @@ easyocr==1.7.2
 et_xmlfile==2.0.0
 Faker==37.6.0
 fastapi==0.133.0
-filelock==3.20.3
+filelock==4.2.1
 filetype==1.2.0
 fsspec==2026.6.0
 h11==0.16.0
